@@ -7,6 +7,7 @@ import { DoomsdayClockSpeed } from "../game/DoomsdayClock";
 import {
   Difficulty,
   Game,
+  GameMapSize,
   GameType,
   Gold,
   Player,
@@ -23,6 +24,7 @@ import { UserSettings } from "../game/UserSettings";
 import { GameConfig, TeamCountConfig } from "../Schemas";
 import { NukeType } from "../StatsSchemas";
 import { assertNever, sigmoid, toInt, within } from "../Util";
+import { oilYieldMultiplier } from "./OilGeography";
 
 declare global {
   interface Window {
@@ -995,9 +997,18 @@ export class Config {
     return 15;
   }
 
-  // Flat per-tick oil accumulation, before geography weighting (Stage 5).
-  oilExtractorRate(): number {
-    return 2;
+  // Per-tick oil accumulation: a flat base rate scaled by how close the
+  // extractor's tile is to real-world oil-producing regions (see
+  // OilGeography.ts). (px, py) are the tile's raw in-game coordinates;
+  // GameMapSize.Compact halves every tile coordinate relative to the
+  // "Normal"-size map OilGeography.ts's anchors are calibrated against
+  // (mirrors TerrainMapLoader's nation-coordinate halving), so undo that
+  // here rather than pushing the detail onto every caller.
+  oilExtractorRate(px: number, py: number): number {
+    const base = 2;
+    const scale = this._gameConfig.gameMapSize === GameMapSize.Compact ? 2 : 1;
+    const gameMap = this._gameConfig.gameMap;
+    return base * oilYieldMultiplier(gameMap, px * scale, py * scale);
   }
 
   // Storage cap per extractor — production stops once full until it's

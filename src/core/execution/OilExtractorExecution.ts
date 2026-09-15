@@ -111,7 +111,12 @@ export class OilExtractorExecution implements Execution {
     if (this.extractor.oil() >= capacity) {
       return;
     }
-    const rate = this.mg.config().oilExtractorRate();
+    const rate = this.mg
+      .config()
+      .oilExtractorRate(
+        this.mg.x(this.extractor.tile()),
+        this.mg.y(this.extractor.tile()),
+      );
     this.extractor.setOil(Math.min(capacity, this.extractor.oil() + rate));
   }
 
