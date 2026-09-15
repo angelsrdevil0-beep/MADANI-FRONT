@@ -38,6 +38,8 @@ something material changes — don't let it go stale.
     (BarPass.ts)
   - `7872310` — Bots now consider water-near-shore OilExtractor placement
   - `73e9259` — Balance pass: Oil Ship payout scales with distance traveled
+  - `7c44a6b` — HANDOFF.md update
+  - `98f95de` — Rebrand visible UI from OpenFront to Madani Front
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -733,6 +735,65 @@ same pre-existing `InventoryModal.test.ts` flakiness.
 payout shift (shipsArrived 3473→2971, tradeGold 644.6M→573.2M - fewer,
 better-paying trips on average, consistent with short hops now paying
 less).
+
+**Rebrand: OpenFront → Madani Front (commit `98f95de`)** — user asked to
+rename the game. Scoped this deliberately, confirmed with the user first
+given the size of the naming surface: "OpenFront" appears in 101 files
+project-wide (all 50+ `resources/lang/*.json` translation files, legal/
+attribution files, CI config, docs). User chose the narrowest option —
+just the visible UI, leaving translations/docs/code comments alone.
+
+Two things worth knowing if this needs revisiting or extending:
+
+1. **The original logo assets (`OpenFrontLogo.svg`, `OpenFront.png`,
+   `OF.png`) live under `proprietary/`, whose `LICENSE` explicitly
+   forbids creating derivative works of those assets** ("You may NOT:
+   ...Modify, alter, or create derivative works of these assets for
+   redistribution"). Did not edit them. Instead added two new, original
+   assets under `resources/images/` (the AGPL-covered tree, freely
+   editable) — `MadaniFrontLogo.svg` (wide wordmark, same 1364:259
+   aspect ratio the header `<img>` tags already assume) and `MF.svg` (a
+   small monogram, replacing the compact "OF" mobile watermark) — both
+   simple gradient text in the existing malibu-blue/aquarius palette
+   (`#0084d1`→`#3fa9f5`, from `styles.css`), not an attempt at real
+   logo-design work. Every reference to the old filenames was
+   retargeted: `DesktopNavBar.ts`, `MobileNavBar.ts`, `PlayPage.ts`
+   (header logo + alt text), and `RenderHtml.ts` +
+   `vite.config.ts` (the homepage background watermark logo, both the
+   production and dev-server code paths — there are two nearly-identical
+   copies of that template-data block, easy to update one and miss the
+   other).
+2. **`en.json` is a translation file, so it was left alone too — meaning
+   the actual live browser tab title still reads "OpenFront (ALPHA)".**
+   `index.html`'s raw `<title data-i18n="main.title">` and `og:title`
+   were updated (the latter is genuinely effective, since social-preview
+   crawlers read raw HTML and don't run the client's JS), but
+   `LangSelector.ts` overwrites `document.title` from `en.json`'s
+   `main.title` key on every load (confirmed: it's the exact same
+   literal string "OpenFront (ALPHA)" in every locale file, i.e. never
+   actually translated — it's just filed alongside translations). If the
+   user wants the real tab title changed, that one line in `en.json`
+   would need updating despite being a "translation file" — flag this
+   back to them rather than deciding unilaterally, since they explicitly
+   scoped translations out.
+3. **`SteamWishlistButton.ts`'s OpenFront logo was deliberately left
+   alone** — that component links to the real OpenFront Steam listing
+   (real `STEAM_APP_ID`), so swapping its logo would show a "Madani
+   Front" image pointing at a different game's store page. Not a
+   candidate for this rename at all, not just deferred.
+4. Also intentionally left alone: `favicon.svg` (a pixel-art warship
+   icon shape, no text - nothing to rename), the GitHub/Reddit/CREDITS
+   links in `Footer.ts`/`GameStartingModal.ts` (real URLs to the actual
+   upstream project, not this fork's own infrastructure), and
+   `resources/press/index.html` (a press kit about the real OpenFront
+   company/team/stats - factually about the upstream project, not this
+   fork's UI).
+
+Verified: `tsc --noEmit` clean, lint clean, full suite green (6160
+passed) except the same pre-existing `InventoryModal.test.ts` flakiness.
+Live-verified in the browser (mobile nav sidebar and desktop nav bar
+both showing the new wordmark correctly) rather than just trusting the
+code read, since this was UI-facing.
 
 ## Known issues (found while testing in-browser, not yet fixed)
 
