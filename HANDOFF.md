@@ -31,8 +31,8 @@ something material changes — don't let it go stale.
   - `2f86174` — Pre-Stage-7 bugfix pass: export timing/spam, water-only
     Oil Ship pathing, bot AI Airport/OilExtractor support
   - `65a3225` — HANDOFF.md update
-  - (uncommitted at time of writing) — Stage 7: OilExtractor leveling
-    (stacking), StructureLevelPass render fix, full verification
+  - `70bf199` — Stage 7: OilExtractor leveling (stacking), StructureLevelPass
+    render fix, full verification
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -525,8 +525,8 @@ anyway). If picking this up again, a real multiplayer/bot game would be
 the way to visually confirm bots now build airports/extractors and ships
 hug the coastline.
 
-**Stage 7 — stacking/leveling + full verification (uncommitted at time of
-writing)**: the user asked for two things before finishing Stage 7: make
+**Stage 7 — stacking/leveling + full verification (commit `70bf199`)**:
+the user asked for two things before finishing Stage 7: make
 Airport and OilExtractor "stackable" (their words) — either build several
 side by side, or upgrade one in place — and make sure the bot AI actually
 uses that. Plus the originally-planned Stage 7 verification pass.
@@ -777,11 +777,11 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **6.5. Pre-Stage-7 bugfix pass** (export timing/spam, water-only Oil
       Ship pathing, bot AI Airport/OilExtractor support) — done, commit
       `2f86174`.
-- [x] **7. Tests + balance pass + full verification** — done (uncommitted
-      at time of writing). Also folded in the user's "make Airport/
-      OilExtractor stackable (leveling)" request, since it landed right
-      before this stage: `tsc --noEmit` clean, lint clean, full suite
-      green (6156 passed) except the same pre-existing unrelated
+- [x] **7. Tests + balance pass + full verification** — done, commit
+      `70bf199`. Also folded in the user's "make Airport/OilExtractor
+      stackable (leveling)" request, since it landed right before this
+      stage: `tsc --noEmit` clean, lint clean, full suite green (6156
+      passed) except the same pre-existing unrelated
       `InventoryModal.test.ts` flakiness every stage has hit. See the
       Stage 7 section above for what "stackable" turned into concretely.
 - [x] **8. Bot AI oil economy** — turned out to already be covered:
