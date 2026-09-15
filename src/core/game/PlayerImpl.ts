@@ -1592,7 +1592,19 @@ export class PlayerImpl implements Player {
       case UnitType.SAMLauncher:
       case UnitType.City:
       case UnitType.Factory:
+      case UnitType.Airport:
         return this.landBasedStructureSpawn(targetTile, validTiles);
+      case UnitType.CommercialAircraft:
+        return this.airportTradeSpawn(targetTile);
+      case UnitType.AirMissile:
+        return targetTile;
+      // Not yet buildable — Aircraft Carrier, Air Fighter, Stealth Fighter,
+      // and Ground Attacker land in a later phase (carrierSpawn/airUnitSpawn).
+      case UnitType.AircraftCarrier:
+      case UnitType.AirFighter:
+      case UnitType.StealthFighter:
+      case UnitType.GroundAttacker:
+        return false;
       default:
         assertNever(unitType);
     }
@@ -1782,6 +1794,12 @@ export class PlayerImpl implements Player {
 
   tradeShipSpawn(targetTile: TileRef): TileRef | false {
     return this.units(UnitType.Port).find((u) => u.tile() === targetTile)
+      ? targetTile
+      : false;
+  }
+
+  airportTradeSpawn(targetTile: TileRef): TileRef | false {
+    return this.units(UnitType.Airport).find((u) => u.tile() === targetTile)
       ? targetTile
       : false;
   }

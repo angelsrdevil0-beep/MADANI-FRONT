@@ -29,6 +29,12 @@ export const UT_FACTORY = "Factory" as const;
 export const UT_DEFENSE_POST = "Defense Post" as const;
 export const UT_SAM_LAUNCHER = "SAM Launcher" as const;
 export const UT_MISSILE_SILO = "Missile Silo" as const;
+export const UT_AIRPORT = "Airport" as const;
+
+// Air units — CommercialAircraft (the free trade plane) does not render yet;
+// its sprite needs the same unit-atlas.png surgery the fighter jets will
+// need in a later phase (see UnitPass.ts doc comment).
+export const UT_COMMERCIAL_AIRCRAFT = "Commercial Aircraft" as const;
 
 // ---------------------------------------------------------------------------
 // Derived sets
@@ -41,6 +47,7 @@ export const STRUCTURE_TYPES: ReadonlySet<string> = new Set([
   UT_DEFENSE_POST,
   UT_SAM_LAUNCHER,
   UT_MISSILE_SILO,
+  UT_AIRPORT,
 ]);
 
 export const NUKE_TYPES: ReadonlySet<string> = new Set([
@@ -90,4 +97,6 @@ export const ALL_UNIT_TYPES = [
   UT_SAM_LAUNCHER,
   UT_MISSILE_SILO,
   UT_TRAIN,
+  UT_AIRPORT,
+  UT_COMMERCIAL_AIRCRAFT,
 ] as const;

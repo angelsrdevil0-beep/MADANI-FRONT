@@ -15,6 +15,7 @@ import { UIState } from "../../UIState";
 import { renderNumber, translateText } from "../../Utils";
 import { GameView } from "../../view";
 import {
+  airportIcon,
   atomBombIcon,
   cityIcon,
   defensePostIcon,
@@ -43,6 +44,7 @@ export class UnitDisplay extends LitElement implements Controller {
   private _port = 0;
   private _defensePost = 0;
   private _samLauncher = 0;
+  private _airport = 0;
   private allDisabled = false;
   private _hoveredUnit: PlayerBuildableUnitType | null = null;
   private tutorialHighlight: PlayerBuildableUnitType | null = null;
@@ -123,6 +125,7 @@ export class UnitDisplay extends LitElement implements Controller {
     this._samLauncher = player.totalUnitLevels(UnitType.SAMLauncher);
     this._factories = player.totalUnitLevels(UnitType.Factory);
     this._warships = player.totalUnitLevels(UnitType.Warship);
+    this._airport = player.totalUnitLevels(UnitType.Airport);
     this.requestUpdate();
   }
 
@@ -191,6 +194,13 @@ export class UnitDisplay extends LitElement implements Controller {
             UnitType.Warship,
             "warship",
             this.keybinds["buildWarship"]?.key ?? "7",
+          )}
+          ${this.renderUnitItem(
+            airportIcon,
+            this._airport,
+            UnitType.Airport,
+            "airport",
+            this.keybinds["buildAirport"]?.key ?? "O",
           )}
           ${this.renderUnitItem(
             atomBombIcon,

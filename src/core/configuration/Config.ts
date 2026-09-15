@@ -668,6 +668,65 @@ export class Config {
           cost: () => 0n,
         };
         break;
+      case UnitType.Airport:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(1_500_000, pow2(numUnits) * 200_000),
+            UnitType.Airport,
+          ),
+          constructionDuration: this.instantBuild() ? 0 : 8 * 10,
+          upgradable: true,
+        };
+        break;
+      case UnitType.AircraftCarrier:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(2_000_000, (numUnits + 1) * 500_000),
+            UnitType.AircraftCarrier,
+          ),
+          maxHealth: 3000,
+        };
+        break;
+      case UnitType.CommercialAircraft:
+        info = {
+          cost: () => 0n,
+        };
+        break;
+      case UnitType.AirFighter:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(2_500_000, (numUnits + 1) * 500_000),
+            UnitType.AirFighter,
+          ),
+          maxHealth: 110,
+        };
+        break;
+      case UnitType.StealthFighter:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) =>
+              Math.min(15_000_000, (numUnits + 1) * 5_000_000),
+            UnitType.StealthFighter,
+          ),
+          maxHealth: 100,
+        };
+        break;
+      case UnitType.GroundAttacker:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) =>
+              Math.min(12_000_000, (numUnits + 1) * 3_000_000),
+            UnitType.GroundAttacker,
+          ),
+          maxHealth: 120,
+        };
+        break;
+      case UnitType.AirMissile:
+        info = {
+          cost: () => 0n,
+          damage: 100,
+        };
+        break;
       default:
         assertNever(type);
     }
