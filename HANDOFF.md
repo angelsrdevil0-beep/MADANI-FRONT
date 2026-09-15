@@ -33,6 +33,9 @@ something material changes — don't let it go stale.
   - `65a3225` — HANDOFF.md update
   - `70bf199` — Stage 7: OilExtractor leveling (stacking), StructureLevelPass
     render fix, full verification
+  - `30f1a5c` — HANDOFF.md update
+  - `c71d16b` — Fix: phantom half-filled health bar on Oil Extractor
+    (BarPass.ts)
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -614,6 +617,67 @@ screenshot); `oilExtractorValue()` (bot tile-scoring for OilExtractor)
 still only considers land placement, so a bot will never build one on
 water-near-shore the way a human player can — flagged back in the
 pre-Stage-7 pass too, still not done.
+
+**Bug fix — phantom health bar on Oil Extractor (commit `c71d16b`)**: the
+user reported a second bar always sitting above the Oil Extractor icon,
+stuck at half-filled, present in every state (building/extracting/full)
+- distinct from the intended oil-fill bar (which renders below the icon
+and correctly reflects real fill level). Root cause, found by reading
+`BarPass.ts` (no live repro was needed to *find* it, though one was done
+afterward to confirm): `Renderer.updateUnits()` calls
+`barPass.updateBars(units, this.lastStructures, gameTick)`, and both
+arguments actually receive the **same full unit map** -
+`Renderer.updateStructures()` sets `this.lastStructures = units` with no
+filtering, so "mobileUnits" in `BarPass`'s own signature is a misnomer,
+not an enforced split. This was harmless as long as Warship was the only
+unit type with a non-null `health` (the loop's only real guard was
+`health !== null`) - but OilExtractor has carried its own `maxHealth: 500`
+since Stage 2 (for PvP destructibility, unrelated to this bar), making it
+the second type this loop ever sees structures come through. Worse, the
+loop's max-health divisor was hardcoded to `this.warshipMaxHealth` (1000)
+for every unit regardless of actual type, so a fresh, fully-healthy
+Oil Extractor (500/500) read as `500/1000` - exactly 0.5, forever,
+regardless of its real state. Fixed with one line: `if
+(STRUCTURE_TYPES.has(unit.unitType)) continue;` at the top of the loop -
+health bars are only ever meant to hover over mobile units (the class's
+own header comment already said "above warships"), and structures'
+damage state (if any structure ever needs to show one) belongs on the
+progress-bar slot below them instead, not this one. This also
+future-proofs the bar against any other structure type gaining a
+`maxHealth` later.
+
+Live-verified: started a real Solo game via the Claude Browser pane
+(headless Playwright was tried first as a more reliable driver per the
+`run-openfront` skill, but its Chromium download is geo-blocked on this
+network - reverted that install attempt cleanly, `git status` confirms no
+stray package.json/lock changes). Two things worth remembering for next
+time this is needed: (1) the `single-player-modal` Lit element's
+properties (`bots`, `instantBuild`, `infiniteGold`, `selectedDifficulty`,
+`nations`, etc.) are directly settable from page JS before clicking Start
+- `selectedDifficulty` is a **string enum** (`"Easy"`, not `0`); passing a
+raw number throws `Unexpected value: 0` deep in an `assertNever` and
+silently wedges game startup. (2) The documented ctrl+click-to-open-
+build-menu gesture needs a **real `keydown`/`keyup` KeyboardEvent with
+`code: "ControlLeft"`** dispatched on `window` - `InputHandler.ts` tracks
+modifier state via its own `activeKeys` Set populated by real keyboard
+listeners, not the mouse event's `ctrlKey` flag, so `computer`'s
+`modifiers: "ctrl"` click parameter alone does not open it (confirmed:
+the click went through fine, the menu just never left `.hidden`). Wrapping
+a plain click in `window.dispatchEvent(new KeyboardEvent("keydown", {code:
+"ControlLeft", ...}))` / `"keyup"` opened it reliably. Built two Oil
+Extractors this way and confirmed via `myPlayer().units()` ground truth
+(oil/health/tile fields) that they existed and were producing; the user
+watched the fix land live via Vite HMR in their own tab and confirmed
+"it works" before this round's automated verification even finished.
+
+Verified: `tsc --noEmit` clean, lint clean, full suite green (6156
+passed) except the same pre-existing unrelated `InventoryModal.test.ts`
+flakiness. No dedicated unit test added for `BarPass.ts` - like every
+other GL render pass in this codebase (`StructurePass`,
+`StructureLevelPass`, `PointLightPass`, none of which have test files
+either), it needs a constructed `WebGL2RenderingContext` and is
+verified live instead, consistent with prior stages' approach to render
+bugs (e.g. the shapeSDF triangle/circle fix).
 
 ## Known issues (found while testing in-browser, not yet fixed)
 
