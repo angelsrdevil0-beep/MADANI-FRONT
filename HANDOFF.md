@@ -28,9 +28,8 @@ something material changes — don't let it go stale.
   - `0b0aba4` — HANDOFF.md update
   - `e0410c9` — Post-Stage-6 fixes: shape bug, rail redesign, Oil HUD
   - `1aef1cf` — HANDOFF.md update
-  - (uncommitted at time of writing) — Pre-Stage-7 bugfix pass: export
-    timing/spam, water-only Oil Ship pathing, bot AI Airport/OilExtractor
-    support
+  - `2f86174` — Pre-Stage-7 bugfix pass: export timing/spam, water-only
+    Oil Ship pathing, bot AI Airport/OilExtractor support
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -442,7 +441,7 @@ Oil Ship column already existed from Stage 6 and re-running the old
 of revising the 14th. Invoked via a new third CLI mode,
 `unit-redraw-oilship`.
 
-**Pre-Stage-7 bugfix pass (uncommitted at time of writing)**: the user
+**Pre-Stage-7 bugfix pass (commit `2f86174`)**: the user
 tested the oil economy again after Stage 6/post-fixes and reported three
 problems, all fixed in one pass before proceeding to Stage 7:
 
@@ -683,9 +682,8 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **5. Geography-based yield weighting** — done, commit `2b10872`.
 - [x] **6. Client wiring** — done, commit `f890c76`.
 - [x] **6.5. Pre-Stage-7 bugfix pass** (export timing/spam, water-only Oil
-      Ship pathing, bot AI Airport/OilExtractor support) — done, see above
-      (not yet committed as of this writing — commit before starting
-      Stage 7 if picking this up fresh).
+      Ship pathing, bot AI Airport/OilExtractor support) — done, commit
+      `2f86174`.
 - [ ] **7. Tests + balance pass + full verification** (~20-30 min) —
       `npx tsc --noEmit`, `npm run lint`, `npm test`, dev-server sanity
       check, update this file's "What's actually done".
