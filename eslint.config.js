@@ -33,7 +33,7 @@ export default [
             "__mocks__/fileMock.js",
             "eslint.config.js",
             "scripts/sync-assets.mjs",
-            "scripts/extendIconAtlas.cjs",
+            "scripts/extendSpriteAtlas.cjs",
             "tests/matchmaking/*.mjs",
           ],
         },

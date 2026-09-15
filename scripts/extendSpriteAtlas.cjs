@@ -1,13 +1,27 @@
-// One-off tool: appends a new column to resources/atlases/icon-atlas.png
-// (the StructurePass sprite atlas) using only Node's built-in zlib — no
-// native deps. Written because the real generate-sprite-atlases.mjs isn't
-// in this checkout, and `npm run inst` runs with --ignore-scripts, so the
-// `canvas` package's native binary was never built.
+// One-off tool: appends a new column to one of the two GPU sprite atlases
+// (resources/atlases/icon-atlas.png for StructurePass, unit-atlas.png for
+// UnitPass) using only Node's built-in zlib — no native deps. Written
+// because the real generate-sprite-atlases.mjs generator isn't in this
+// checkout, and `npm run inst` runs with --ignore-scripts, so the `canvas`
+// package's native binary was never built.
 //
-// Usage: node scripts/extendIconAtlas.cjs
-// Edit the `draw()` call at the bottom to change what gets drawn into the
-// new column — it currently draws the Airport control-tower icon,
-// mirroring resources/images/AirportIconWhite.svg at 64x64.
+// Combined into one file (rather than a script per atlas) to stay under
+// eslint's default-project file-count cap — see eslint.config.js's
+// `allowDefaultProject` list.
+//
+// Usage:
+//   node scripts/extendSpriteAtlas.cjs icon   # StructurePass icon-atlas.png (64x64 cells, RGB icons)
+//   node scripts/extendSpriteAtlas.cjs unit   # UnitPass unit-atlas.png (13x13 cells, grayscale sprites)
+//
+// unit-atlas.png sprites are grayscale-only: the shader recolors by exact
+// gray level (see the "3-band gray replacement" doc comment in
+// UnitPass.ts) — 180 -> territory color, 130 -> spawn/mid color, 100 ->
+// center accent, 70 -> border color. Use only those four gray values
+// (R=G=B, alpha 255) for visible pixels; everything else must be fully
+// transparent (all-zero RGBA).
+//
+// Edit the `draw*` function for the atlas you're targeting to change what
+// gets drawn into the new column.
 //
 // PNG chunk format reference: https://www.w3.org/TR/png/
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -15,13 +29,7 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 
-const ATLAS_PATH = path.join(
-  __dirname,
-  "..",
-  "resources",
-  "atlases",
-  "icon-atlas.png",
-);
+const ATLASES_DIR = path.join(__dirname, "..", "resources", "atlases");
 
 // --- CRC32 (PNG uses the standard zlib/gzip CRC32) ---
 const CRC_TABLE = (() => {
@@ -192,6 +200,9 @@ function makeDrawTools(image) {
     image.pixels[o + 2] = b;
     image.pixels[o + 3] = a;
   }
+  function setGray(x, y, gray) {
+    setPixel(x, y, gray, gray, gray, 255);
+  }
   function fillRect(x0, y0, x1, y1) {
     for (let y = Math.max(0, y0); y < Math.min(image.height, y1); y++) {
       for (let x = Math.max(0, x0); x < Math.min(image.width, x1); x++) {
@@ -240,25 +251,35 @@ function makeDrawTools(image) {
       }
     }
   }
-  return { fillRect, fillCircle, fillQuad };
+  return { setGray, fillRect, fillCircle, fillQuad };
 }
 
-function main() {
-  const original = fs.readFileSync(ATLAS_PATH);
+function extendAtlas(fileName, colWidth, draw) {
+  const atlasPath = path.join(ATLASES_DIR, fileName);
+  const original = fs.readFileSync(atlasPath);
   const decoded = decodePng(original);
-  const colWidth = 64; // existing icon-atlas.png columns are all 64x64
   if (decoded.width % colWidth !== 0) {
     throw new Error(
-      `atlas width ${decoded.width} isn't a multiple of ${colWidth}`,
+      `${fileName} width ${decoded.width} isn't a multiple of ${colWidth}`,
     );
   }
   const extended = addColumn(decoded, colWidth);
-  const { fillRect, fillCircle, fillQuad } = makeDrawTools(extended);
+  draw(extended, makeDrawTools(extended));
 
-  // Draw the Airport icon (control tower) into the new column, scaled from
-  // the 0..100 viewBox of resources/images/AirportIconWhite.svg to 64x64.
-  const colBase = extended.colBase;
-  const scale = colWidth / 100;
+  const out = encodePng(extended.width, extended.height, extended.pixels);
+  fs.writeFileSync(atlasPath, out);
+  console.log(
+    `wrote ${atlasPath}: ${decoded.width}x${decoded.height} -> ${extended.width}x${extended.height}`,
+  );
+}
+
+// Draws the Airport icon (control tower) into the new column, scaled from
+// the 0..100 viewBox of resources/images/AirportIconWhite.svg to 64x64.
+// Used by StructurePass's icon-atlas.png (64x64 cells, plain white icons).
+function drawAirportIcon(image, tools) {
+  const { fillRect, fillCircle, fillQuad } = tools;
+  const colBase = image.colBase;
+  const scale = 64 / 100;
   const at = (x, y) => [colBase + x * scale, y * scale];
   fillRect(...at(10, 88), ...at(90, 94)); // runway
   fillQuad([at(46, 90), at(40, 46), at(60, 46), at(54, 90)]); // tower shaft
@@ -266,12 +287,40 @@ function main() {
   fillRect(...at(48, 10), ...at(52, 30)); // mast
   const [bx, by] = at(50, 8);
   fillCircle(bx, by, 5 * scale); // beacon
+}
 
-  const out = encodePng(extended.width, extended.height, extended.pixels);
-  fs.writeFileSync(ATLAS_PATH, out);
-  console.log(
-    `wrote ${ATLAS_PATH}: ${decoded.width}x${decoded.height} -> ${extended.width}x${extended.height}`,
-  );
+// Draws a small top-down airplane silhouette into the new column, for
+// Commercial Aircraft. Used by UnitPass's unit-atlas.png (13x13 cells,
+// grayscale-only sprites — see the module doc comment above).
+function drawCommercialAircraft(image, tools) {
+  const { setGray } = tools;
+  const colBase = image.colBase;
+  const LIGHT = 180;
+  const DARK = 70;
+  // Fuselage (nose to tail), centered at local x=6, skipping the wing rows.
+  for (const y of [3, 4, 6, 7, 9]) {
+    setGray(colBase + 6, y, LIGHT);
+  }
+  // Main wings (wide), row 5.
+  for (let x = 3; x <= 9; x++) {
+    setGray(colBase + x, 5, DARK);
+  }
+  // Tail wings (narrower), row 8.
+  for (let x = 4; x <= 8; x++) {
+    setGray(colBase + x, 8, DARK);
+  }
+}
+
+function main() {
+  const target = process.argv[2];
+  if (target === "icon") {
+    extendAtlas("icon-atlas.png", 64, drawAirportIcon);
+  } else if (target === "unit") {
+    extendAtlas("unit-atlas.png", 13, drawCommercialAircraft);
+  } else {
+    console.error("Usage: node scripts/extendSpriteAtlas.cjs <icon|unit>");
+    process.exit(1);
+  }
 }
 
 main();

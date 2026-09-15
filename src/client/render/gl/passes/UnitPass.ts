@@ -12,8 +12,16 @@
  * split into separate buffers for correct layer ordering:
  *   Ground/sea (boats, trains) → rendered below structures
  *   Missiles (nukes, shells, SAM, MIRV warheads) → rendered above structures
+ *   Commercial Aircraft also renders in the "missile" (above-structures)
+ *   bucket even though it isn't a projectile — it's the one mobile unit
+ *   that flies over land, so it needs to render above city/factory/airport
+ *   icons rather than being hidden under them like a boat would be.
  *
- * Atlas layout (12 columns × 13px cells, pre-built by generate-sprite-atlases.mjs):
+ * Atlas layout (13 columns × 13px cells). generate-sprite-atlases.mjs, the
+ * real generator, isn't in this checkout — columns 0-11 were pre-built by
+ * it upstream; column 12 (Commercial Aircraft) was hand-added with
+ * scripts/extendUnitAtlas.cjs (pure Node zlib PNG surgery, same approach
+ * as scripts/extendIconAtlas.cjs used for the structure icon atlas):
  *   Col 0: Transport (5×5)
  *   Col 1: Trade Ship (5×5)
  *   Col 2: Warship (11×11)
@@ -26,6 +34,7 @@
  *   Col 9: Train Engine (5×5)
  *   Col 10: Train Carriage (5×5)
  *   Col 11: Train Carriage Loaded (5×5)
+ *   Col 12: Commercial Aircraft (7×7)
  *
  * Data flow:
  *   FrameSnapshot.units → filter by typeToAtlasIdx → instance VBO → GPU
@@ -39,6 +48,7 @@ import {
   SMOOTHED_NUKE_TYPES,
   TrainType,
   UT_ATOM_BOMB,
+  UT_COMMERCIAL_AIRCRAFT,
   UT_HYDROGEN_BOMB,
   UT_MIRV,
   UT_MIRV_WARHEAD,
@@ -85,6 +95,7 @@ const UNIT_ORDER = [
   "TrainEngine",
   "TrainCarriage",
   "TrainCarriageLoaded",
+  UT_COMMERCIAL_AIRCRAFT,
 ] as const;
 
 const ATLAS_COLS = UNIT_ORDER.length;
@@ -106,7 +117,7 @@ const TRAIN_FIRST_COL = UNIT_ORDER.indexOf("TrainEngine");
 /**
  * Per-instance data (16 bytes):
  *   float x, y, ownerID   — 12 bytes (3 floats)
- *   uint8 atlasIdx         —  1 byte  (atlas column 0–11)
+ *   uint8 atlasIdx         —  1 byte  (atlas column 0–12)
  *   uint8 flags            —  1 byte  (0 = normal, 1 = flicker, 2 = angry, 3 = trade-friendly, 4 = retreating, 5 = flicker-untargetable)
  *   uint8 flickerHash      —  1 byte  (per-instance flicker phase offset)
  *   1 byte padding         — aligns to 4-byte boundary
@@ -139,7 +150,9 @@ const FLICKER_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Missile/projectile types — rendered on top of structures in the layer order.
- *  Ground/sea units (boats, trains) render below structures. */
+ *  Ground/sea units (boats, trains) render below structures. Commercial
+ *  Aircraft rides in this bucket too, purely for z-order — it flies over
+ *  land and needs to render above city/factory/airport icons. */
 const MISSILE_TYPES: ReadonlySet<string> = new Set([
   UT_ATOM_BOMB,
   UT_HYDROGEN_BOMB,
@@ -147,6 +160,7 @@ const MISSILE_TYPES: ReadonlySet<string> = new Set([
   UT_SAM_MISSILE,
   UT_SHELL,
   UT_MIRV_WARHEAD,
+  UT_COMMERCIAL_AIRCRAFT,
 ]);
 
 /** Values per smoothing segment in the flat `smoothSegs` array:
