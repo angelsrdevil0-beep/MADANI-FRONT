@@ -16,7 +16,12 @@ import type { Config } from "../../../../core/configuration/Config";
 import { UnitType } from "../../../../core/game/Game";
 import { maxHealthWithVeterancy } from "../../../../core/game/Veterancy";
 import type { RendererConfig, UnitState } from "../../types";
-import { UT_MISSILE_SILO, UT_OIL_EXTRACTOR, UT_SAM_LAUNCHER } from "../../types";
+import {
+  STRUCTURE_TYPES,
+  UT_MISSILE_SILO,
+  UT_OIL_EXTRACTOR,
+  UT_SAM_LAUNCHER,
+} from "../../types";
 import type { RenderSettings } from "../RenderSettings";
 import { createProgram } from "../utils/GlUtils";
 
@@ -140,10 +145,22 @@ export class BarPass {
     this.veterancyCount = 0;
 
     // --- Health bars + veterancy pips (warships) ---
-    // Only warships carry health among mobile units, so this loop is effectively
-    // warship-only.
+    // This is meant to be warship-only (the health-bar slot sits above the
+    // unit, distinct from the structure progress-bar slot below). It used to
+    // be warship-only *in practice* too, since Warship was the only unit type
+    // with a non-null `health` - but OilExtractor later gained its own
+    // maxHealth (for PvP destructibility, unrelated to this bar), making it
+    // the second type this loop ever sees. Structures were never meant to
+    // show this bar at all (their own damage state, if ever surfaced, is a
+    // job for the progress bar below them, not this slot) - and even if they
+    // were, this loop's maxHealth was hardcoded to the warship constant
+    // regardless of the unit's actual type, so a full-health (500/500)
+    // OilExtractor read as 500/1000 here: a permanent, wrong 50% bar.
+    // Excluding structures fixes both problems by removing the only
+    // non-warship type that could ever reach this code.
     for (const unit of mobileUnits.values()) {
       if (unit.health === null || unit.health <= 0) continue;
+      if (STRUCTURE_TYPES.has(unit.unitType)) continue;
       // Veteran warships have a higher effective max health, so a full veteran
       // ship reads as full. Shared with the engine's UnitImpl.maxHealth().
       const maxHealth = maxHealthWithVeterancy(
