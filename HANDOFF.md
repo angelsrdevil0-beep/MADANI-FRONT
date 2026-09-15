@@ -11,6 +11,8 @@ something material changes — don't let it go stale.
 - Git: real repo, `git log --oneline` to see history. As of this writing:
   - `c05309f` — initial unmodified import of upstream OpenFrontIO
   - `d8a722b` — Phase 1: Airport structure + Commercial Aircraft trade plane
+  - `63c84bf` — this HANDOFF.md
+  - `c54168c` — Stage 0: removed the descoped fighter-jet/carrier scaffolding
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -70,27 +72,18 @@ already served to every player's browser — see this session's transcript
 around the OpenBattle investigation if you need the method again).
 
 **The user decided against all of that.** Airport + Commercial Aircraft is
-enough; no fighters, no carrier. Phase 1's commit still contains harmless
-placeholder scaffolding for the dropped units (see below) — **this should
-be cleaned up**, not left in, per the project's own "no speculative code"
-norm.
+enough; no fighters, no carrier.
 
-### Cleanup task (small, do this first)
+### Cleanup task — DONE (commit `c54168c`)
 
-`d8a722b` added these for the now-cancelled roster — remove them:
-- `src/core/game/Game.ts`: `UnitType.AircraftCarrier`, `.AirFighter`,
-  `.StealthFighter`, `.GroundAttacker`, `.AirMissile` enum members; their
-  `BuildableAttacks` group entries; the `AirCombatUnits`/`PatrolUnits`
-  groups (unused without them); their `UnitParamsMap` entries.
-- `src/core/configuration/Config.ts`: their `unitInfo()` cases.
-- `src/core/game/PlayerImpl.ts`: the `case UnitType.AircraftCarrier: ...
-  return false;` block in `canSpawnUnitType` (and siblings for the other 4
-  dropped types).
-- Leave `UnitType.Airport`, `.CommercialAircraft` and everything they touch
-  — those are the real, wanted feature.
-- Run `npx tsc --noEmit` after — the compiler's exhaustiveness checks
-  (`assertNever`) will immediately flag anywhere still referencing a
-  removed enum member, which is your checklist.
+Removed from `Game.ts`/`Config.ts`/`PlayerImpl.ts`: the 5 dropped
+`UnitType` enum members, their `BuildableAttacks`/`AirCombatUnits`/
+`PatrolUnits` group entries, their `UnitParamsMap` entries, their
+`unitInfo()` cases, their `canSpawnUnitType` placeholder cases. Verified
+via `npx tsc --noEmit` (clean — compiler's `assertNever` exhaustiveness
+check would have flagged any stray reference) and the full test suite
+(same pre-existing unrelated flakiness as before, nothing new broken).
+`UnitType.Airport`/`.CommercialAircraft` untouched.
 
 ## New request — Oil System (not started)
 
@@ -200,8 +193,7 @@ short range instead of exactly-on-shore).
 Update the checkbox and add a one-line note as each lands. Estimates are
 rough effort sizing, not wall-clock guarantees.
 
-- [ ] **0. Cleanup** (~15 min) — remove the descoped Fighter/Carrier
-      placeholder scaffolding, see "Cleanup task" above.
+- [x] **0. Cleanup** — done, commit `c54168c`.
 - [ ] **1. Render Commercial Aircraft** (~20-30 min) — finish Phase 1's
       known gap: extend `unit-atlas.png` (variable-size columns, harder
       than the icon atlas) with a plane sprite, wire it into `UnitPass.ts`.
