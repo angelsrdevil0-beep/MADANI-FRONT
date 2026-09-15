@@ -1044,6 +1044,14 @@ export class Config {
     return BigInt(Math.floor(cargo * 40 * this.goldMultiplierFor(player)));
   }
 
+  // How often (in ticks) a Port or a water-adjacent OilExtractor checks
+  // whether to send its next Oil Ship. A flat cadence rather than a
+  // probability-based spawn (like tradeShipSpawnRate) so oil exports at a
+  // steady, predictable rate instead of a rapid-fire burst.
+  oilShipSpawnIntervalTicks(): number {
+    return 50; // 5 seconds at 10 ticks/sec
+  }
+
   tradeShipShortRangeDebuff(): number {
     return 300;
   }

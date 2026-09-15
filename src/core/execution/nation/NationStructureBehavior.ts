@@ -52,6 +52,11 @@ function getStructureRatios(
       ratioPerCity: 0.75,
       perceivedCostIncreasePerOwned: 1,
     },
+    [UnitType.Airport]: { ratioPerCity: 0.5, perceivedCostIncreasePerOwned: 1 },
+    [UnitType.OilExtractor]: {
+      ratioPerCity: 0.5,
+      perceivedCostIncreasePerOwned: 1,
+    },
     [UnitType.SAMLauncher]: {
       ratioPerCity: SAM_RATIO_BY_DIFFICULTY[difficulty],
       perceivedCostIncreasePerOwned: 0.3,
@@ -493,6 +498,8 @@ export class NationStructureBehavior {
     const buildOrder: UnitType[] = [
       UnitType.Port,
       UnitType.Factory,
+      UnitType.Airport,
+      UnitType.OilExtractor,
       UnitType.SAMLauncher,
       UnitType.MissileSilo,
     ];
@@ -912,9 +919,58 @@ export class NationStructureBehavior {
         return this.portValue();
       case UnitType.SAMLauncher:
         return this.samLauncherValue();
+      case UnitType.Airport:
+        return this.airportValue();
+      case UnitType.OilExtractor:
+        return this.oilExtractorValue();
       default:
         throw new Error(`Value function not implemented for ${type}`);
     }
+  }
+
+  /**
+   * Value function for Airport. Land-only, no coastal requirement -
+   * prefers spacing from other airports, mirroring portValue().
+   */
+  private airportValue(): (tile: TileRef) => number {
+    const game = this.game;
+    const otherUnits = this.player.units(UnitType.Airport);
+
+    return (tile) => {
+      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
+      otherTiles.delete(tile);
+      return nearestTileDist(game, otherTiles, tile);
+    };
+  }
+
+  /**
+   * Value function for OilExtractor. Bots only consider land placement
+   * (skips the water-near-shore option a human player can use, to avoid
+   * duplicating Port's shore-adjacency search for a bot-only path) -
+   * prefers higher real-world-geography oil yield, then spacing from other
+   * extractors.
+   */
+  private oilExtractorValue(): (tile: TileRef) => number {
+    const game = this.game;
+    const otherUnits = this.player.units(UnitType.OilExtractor);
+    const { structureSpacing } = this.spacingConstants();
+    // Scales oilExtractorRate() (1-10 across the real yield range) up so
+    // geography meaningfully competes with the tile-spacing terms below,
+    // which run in the tens-of-tiles range.
+    const YIELD_WEIGHT = 20;
+
+    return (tile) => {
+      let w = 0;
+
+      w += game.config().oilExtractorRate(game.x(tile), game.y(tile)) * YIELD_WEIGHT;
+
+      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
+      otherTiles.delete(tile);
+      const d = nearestTileDist(game, otherTiles, tile);
+      if (d !== Infinity) w += Math.min(d, structureSpacing);
+
+      return w;
+    };
   }
 
   /**
@@ -1283,6 +1339,8 @@ export class NationStructureBehavior {
         case UnitType.Factory:
         case UnitType.MissileSilo:
         case UnitType.Port:
+        case UnitType.Airport:
+        case UnitType.OilExtractor:
           protectEntries.push({
             tile: unit.tile(),
             weight: weightByLevel ? unit.level() : 1,

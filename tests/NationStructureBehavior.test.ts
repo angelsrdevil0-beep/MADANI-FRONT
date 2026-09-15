@@ -981,3 +981,76 @@ describe("NationStructureBehavior.getOrBuildReachableStations", () => {
     expect(buildSpy).toHaveBeenCalledTimes(2);
   });
 });
+
+// ── Airport / OilExtractor bot support ───────────────────────────────────────
+// Regression coverage for a bug where bots never built Airport or
+// OilExtractor: both were missing from getStructureRatios(), buildOrder, and
+// structureSpawnTileValue()'s switch (which threw for any unhandled type).
+
+describe("NationStructureBehavior — Airport/OilExtractor bot support", () => {
+  function makeValueGame(
+    oilRateFn: (x: number, y: number) => number = () => 2,
+  ): any {
+    return {
+      config: () => ({
+        nukeMagnitudes: () => ({ outer: 50 }),
+        oilExtractorRate: oilRateFn,
+      }),
+      x: (t: number) => t,
+      y: () => 0,
+      manhattanDist: (a: number, b: number) => Math.abs(a - b),
+    };
+  }
+
+  it("structureSpawnTileValue returns a working value function for Airport", () => {
+    const player = { units: () => [] } as any;
+    const behavior = makeBehavior(makeValueGame(), player);
+    const valueFn = (behavior as any).structureSpawnTileValue(
+      UnitType.Airport,
+    );
+    expect(valueFn).not.toBeNull();
+    expect(() => valueFn!(5)).not.toThrow();
+  });
+
+  it("structureSpawnTileValue returns a working value function for OilExtractor", () => {
+    const player = { units: () => [] } as any;
+    const behavior = makeBehavior(makeValueGame(), player);
+    const valueFn = (behavior as any).structureSpawnTileValue(
+      UnitType.OilExtractor,
+    );
+    expect(valueFn).not.toBeNull();
+    expect(() => valueFn!(5)).not.toThrow();
+  });
+
+  it("oilExtractorValue scores a higher real-world-yield tile above a lower one", () => {
+    const player = { units: () => [] } as any;
+    const oilRate = (x: number) => (x === 100 ? 10 : 1); // tile 100 is oil-rich
+    const behavior = makeBehavior(makeValueGame(oilRate), player);
+    const valueFn = (behavior as any).oilExtractorValue();
+    expect(valueFn(100)).toBeGreaterThan(valueFn(1));
+  });
+
+  it("airportValue prefers a tile farther from existing airports", () => {
+    const player = { units: () => [{ tile: () => 0 }] } as any;
+    const behavior = makeBehavior(makeValueGame(), player);
+    const valueFn = (behavior as any).airportValue();
+    expect(valueFn(50)).toBeGreaterThan(valueFn(1));
+  });
+
+  it("shouldBuildStructure returns true for Airport and OilExtractor below their ratio target", () => {
+    const player = { unitsOwned: () => 0 } as any;
+    const game = {
+      config: () => ({
+        gameConfig: () => ({ difficulty: Difficulty.Medium }),
+        isUnitDisabled: () => false,
+      }),
+    };
+    const behavior = makeBehavior(game, player);
+    expect(
+      (behavior as any).shouldBuildStructure(UnitType.Airport, 10, true),
+    ).toBe(true);
+    expect(
+      (behavior as any).shouldBuildStructure(UnitType.OilExtractor, 10, true),
+    ).toBe(true);
+  });
+});

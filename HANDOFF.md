@@ -27,6 +27,10 @@ something material changes — don't let it go stale.
   - `f890c76` — Stage 6: client wiring (build menu, sprites, storage bar)
   - `0b0aba4` — HANDOFF.md update
   - `e0410c9` — Post-Stage-6 fixes: shape bug, rail redesign, Oil HUD
+  - `1aef1cf` — HANDOFF.md update
+  - (uncommitted at time of writing) — Pre-Stage-7 bugfix pass: export
+    timing/spam, water-only Oil Ship pathing, bot AI Airport/OilExtractor
+    support
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -438,16 +442,89 @@ Oil Ship column already existed from Stage 6 and re-running the old
 of revising the 14th. Invoked via a new third CLI mode,
 `unit-redraw-oilship`.
 
+**Pre-Stage-7 bugfix pass (uncommitted at time of writing)**: the user
+tested the oil economy again after Stage 6/post-fixes and reported three
+problems, all fixed in one pass before proceeding to Stage 7:
+
+1. **Oil exported continuously instead of "fill first, then export."**
+   Root cause: `OilExtractorExecution.maybeExportByRail()` triggered on
+   `oil() > 0` (any oil at all) every ~10 ticks, and both
+   `PortExecution.maybeSpawnOilShip()` and the extractor's own direct-ship
+   spawn used the same probabilistic `tradeShipSpawnRate()` "pity timer"
+   TradeShip uses — which ramps to a near-100% chance within a few
+   rejections, so once oil started flowing it spawned a new Oil Ship on
+   almost every check. Fixed by: (a) extractors now only export via rail
+   once `oil() >= oilExtractorCapacity()` (full), and when they do, the
+   *entire* tank moves to the Port in one shot (capped by the Port's
+   remaining room) instead of a bounded per-check chunk; (b) the direct
+   extractor-to-extractor Oil Ship path gained the same "must be full"
+   gate; (c) both that path and the Port's own Oil Ship spawn switched
+   from the probabilistic pity-timer to a flat cadence — new
+   `Config.oilShipSpawnIntervalTicks()` (default 50 ticks = 5s, matching
+   the user's own "every 5 seconds" spec). The Port itself still ships
+   out whenever it has *any* oil (not gated on being full) — only the
+   extractor's own tank has the "fill first" rule; the Port is a
+   pass-through collector, not a second tank to top off.
+2. **Oil Ships could cross land.** `OilShipExecution` had copied
+   `AirportPlaneExecution`'s `straightLinePath` (deliberately
+   terrain-ignoring, correct for a plane) instead of `TradeShipExecution`'s
+   `WaterPathFinder`-based routing. Rewritten to mirror `TradeShipExecution`
+   exactly (same stagger/memoized pathfinder, same `PathStatus.NEXT/
+   COMPLETE/NOT_FOUND` per-tick stepping, same motion-plan recording). Also
+   added water-component reachability filtering to
+   `OilExtractorExecution.tradingExtractors()` (mirroring
+   `PortExecution.tradingPorts()`'s existing pattern) so a destination is
+   only offered if it's actually reachable by water from the source,
+   rather than just "is water/shore adjacent" with no connectivity check.
+3. **Bots never build Airport or OilExtractor at all** — this is why solo
+   airports never got a trade partner and bots never touched oil.
+   `NationStructureBehavior.ts` (the bot AI's structure planner) had a
+   hardcoded ratio table, build-order list, and value-function switch that
+   simply never mentioned either type — not a bug in the oil/airport code
+   itself, a missing integration. Added: ratio entries (0.5 per city for
+   both, a first-pass guess — tune later if bots over/under-build them),
+   both added to `buildOrder` (right after Port/Factory, before military
+   structures), and new `airportValue()` (mirrors `portValue()` — spacing
+   only, land-only via the existing generic land-tile path since Airport
+   needs no coastal check) and `oilExtractorValue()` (spacing +
+   `Config.oilExtractorRate()`-weighted preference for real-world-yield
+   tiles, land-only for bots — a bot never uses the water-near-shore
+   placement option a human can, to avoid duplicating Port's
+   shore-adjacency search for a bot-only path; flagged as a possible
+   follow-up, not done here). Also added both types to
+   `samLauncherValue()`'s protected-structure list so bot SAMs consider
+   covering them.
+
+Verified: `tsc --noEmit` clean, lint clean. Updated two existing tests
+whose setup assumed the old behavior (`tests/OilRail.test.ts`'s "moves oil
+into stockpile" test now sets a matching extractor capacity so its seeded
+oil level counts as "full"; `tests/OilShip.test.ts` now sets
+`oilShipSpawnIntervalTicks` to 1 in its shared `beforeEach` so ship-spawn
+tests don't need to wait out the real 5s cadence) and added new ones: a
+"does not export a partially-filled extractor" test, a "ship only ever
+moves over water" test (tracks every tile the ship occupies mid-transit
+and asserts each is water), and five new `NationStructureBehavior` unit
+tests covering the new value functions and ratio entries. Full suite:
+6154 passed, only the same pre-existing unrelated `InventoryModal.test.ts`
+jsdom timeout flakiness (5 tests, every prior stage has hit this, never
+touched that file). `tests/NationGoldPerMinute.test.ts`'s 20-minute
+nation-economy snapshot needed updating (`npx vitest run
+tests/NationGoldPerMinute.test.ts -u`) — bots participating in the
+oil/airport economy for the first time roughly doubled shipsArrived
+(1489→3209) and raised tradeGold (371.6M→614.6M) map-wide, which is the
+fix working as intended, not a regression; re-review that snapshot diff
+again if it swings by a similar order of magnitude after any future
+change to bot structure ratios.
+
+Not yet done: no live in-browser verification this round (this was a
+core-sim bugfix pass, not UI-facing — see the Browser-pane automation
+quirk note above for why automated tests are the reliable path here
+anyway). If picking this up again, a real multiplayer/bot game would be
+the way to visually confirm bots now build airports/extractors and ships
+hug the coastline.
+
 ## Known issues (found while testing in-browser, not yet fixed)
 
-- **Bots never build Airports**, so no Commercial Aircraft trade ever
-  happens between/with bots — only human-built airports trade. Confirmed
-  in `src/core/execution/nation/NationStructureBehavior.ts`: its
-  structure-type list includes `UnitType.Port` but not `UnitType.Airport`.
-  Pre-existing gap from Phase 1, not something any Oil stage touched.
-  Will very likely also apply to `UnitType.OilExtractor` once bots are
-  in play — relevant to Stage 8 (optional bot AI economy) and worth
-  fixing for Airport too if the user wants bot trade to actually work.
 - User also saw an IDM ("download mp3") popup while clicking around the
   dev-server UI. Almost certainly IDM's browser download-monitor
   misfiring on the game's normal Howler.js audio-asset requests, not a
@@ -605,6 +682,10 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **4. Domestic rail integration** — done, commit `26848ab`.
 - [x] **5. Geography-based yield weighting** — done, commit `2b10872`.
 - [x] **6. Client wiring** — done, commit `f890c76`.
+- [x] **6.5. Pre-Stage-7 bugfix pass** (export timing/spam, water-only Oil
+      Ship pathing, bot AI Airport/OilExtractor support) — done, see above
+      (not yet committed as of this writing — commit before starting
+      Stage 7 if picking this up fresh).
 - [ ] **7. Tests + balance pass + full verification** (~20-30 min) —
       `npx tsc --noEmit`, `npm run lint`, `npm test`, dev-server sanity
       check, update this file's "What's actually done".

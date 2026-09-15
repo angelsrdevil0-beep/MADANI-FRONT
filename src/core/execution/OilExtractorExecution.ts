@@ -29,7 +29,6 @@ export class OilExtractorExecution implements Execution {
   private mg: Game;
   private random: PseudoRandom;
   private checkOffset: number;
-  private oilShipSpawnRejections = 0;
 
   constructor(private extractor: Unit) {}
 
@@ -73,8 +72,12 @@ export class OilExtractorExecution implements Execution {
     }
   }
 
+  // Only exports once the extractor's own tank is full - it accumulates
+  // silently until then, so this fires as a single lump transfer per fill
+  // cycle rather than a continuous per-tick trickle into the Port.
   private maybeExportByRail(): void {
-    if (this.extractor.oil() <= 0) {
+    const extractorCapacity = this.mg.config().oilExtractorCapacity();
+    if (this.extractor.oil() < extractorCapacity) {
       return;
     }
     // Only check every 10 ticks for performance, same as the ship check.
@@ -102,15 +105,13 @@ export class OilExtractorExecution implements Execution {
     }
 
     const port = portStation.unit;
-    const capacity = this.mg.config().portOilCapacity();
-    if (port.oil() >= capacity) {
+    const portCapacity = this.mg.config().portOilCapacity();
+    if (port.oil() >= portCapacity) {
       return;
     }
-    const cargo = Math.min(
-      this.extractor.oil(),
-      capacity - port.oil(),
-      this.mg.config().oilShipCapacity(), // one chunk per check, not the whole tank at once
-    );
+    // The whole tank moves at once (capped by the Port's remaining room),
+    // not a bounded per-check chunk - it only got here because it's full.
+    const cargo = Math.min(this.extractor.oil(), portCapacity - port.oil());
     this.extractor.setOil(this.extractor.oil() - cargo);
     port.setOil(port.oil() + cargo);
   }
@@ -138,17 +139,18 @@ export class OilExtractorExecution implements Execution {
     );
   }
 
+  // Only ships once the extractor's own tank is full - same "fill first"
+  // rule as the rail path, so a busy coastal extractor sends one full load
+  // per fill cycle on a steady cadence rather than firing off on every
+  // check as soon as there's any oil at all.
   private maybeSpawnOilShip(): void {
-    if (this.extractor.oil() <= 0 || !this.hasWaterAccess()) {
+    const capacity = this.mg.config().oilExtractorCapacity();
+    if (this.extractor.oil() < capacity || !this.hasWaterAccess()) {
       return;
     }
 
-    // Only check every 10 ticks for performance, mirrors AirportExecution.
-    if ((this.mg.ticks() + this.checkOffset) % 10 !== 0) {
-      return;
-    }
-
-    if (!this.shouldSpawnOilShip()) {
+    const interval = this.mg.config().oilShipSpawnIntervalTicks();
+    if ((this.mg.ticks() + this.checkOffset) % interval !== 0) {
       return;
     }
 
@@ -168,31 +170,28 @@ export class OilExtractorExecution implements Execution {
     );
   }
 
-  shouldSpawnOilShip(): boolean {
-    const numOilShips = this.mg.unitCount(UnitType.OilShip);
-    const spawnRate = this.mg
-      .config()
-      .tradeShipSpawnRate(this.oilShipSpawnRejections, numOilShips);
-    if (this.random.chance(spawnRate)) {
-      this.oilShipSpawnRejections = 0;
-      return true;
-    }
-    this.oilShipSpawnRejections++;
-    return false;
-  }
-
-  // Other players' water-adjacent OilExtractors, weighted like
+  // Other players' water-adjacent OilExtractors that share a water body
+  // with this one (so a route actually exists), weighted like
   // AirportExecution.tradingAirports() (proximity + friendliness bonuses).
   tradingExtractors(): Unit[] {
     const self = this.extractor;
     const owner: Player = self.owner();
+    const sourceComponents = new Set<number>();
+    for (const neighbor of this.mg.neighbors(self.tile())) {
+      if (!this.mg.isWater(neighbor)) continue;
+      const comp = this.mg.getWaterComponent(neighbor);
+      if (comp !== null) sourceComponents.add(comp);
+    }
     const extractors = this.mg
       .players()
       .filter((p) => p !== owner && p.canTrade(owner))
       .flatMap((p) => p.units(UnitType.OilExtractor))
-      .filter(
-        (u) => this.mg.isWater(u.tile()) || this.mg.isShore(u.tile()),
-      )
+      .filter((u) => {
+        for (const comp of sourceComponents) {
+          if (this.mg.hasWaterComponent(u.tile(), comp)) return true;
+        }
+        return false;
+      })
       .sort(
         (a, b) =>
           this.mg.manhattanDist(self.tile(), a.tile()) -

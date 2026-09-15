@@ -1,10 +1,12 @@
 import { Execution, Game, Player, Unit, UnitType } from "../game/Game";
 import { TileRef } from "../game/GameMap";
-import { straightLinePath } from "../pathfinding/StraightLinePath";
+import { WaterPathFinder } from "../pathfinding/PathFinder";
+import { PathStatus } from "../pathfinding/types";
 
-// Mirrors AirportPlaneExecution: a free auto-spawned trade unit that
-// travels a straight line (ignoring terrain, like the trade plane) and pays
-// gold to both sides on arrival. Two independent origins share this class:
+// Mirrors TradeShipExecution's water-only routing (WaterPathFinder) rather
+// than the trade plane's straight-line/ignore-terrain path - unlike a
+// plane, a ship can't cross land. Pays gold to both sides on arrival, same
+// as before. Two independent origins share this class:
 //   - A water-adjacent OilExtractor shipping straight to a foreign
 //     OilExtractor (OilExtractorExecution.maybeSpawnOilShip) - the original
 //     direct-export path.
@@ -19,8 +21,11 @@ export class OilShipExecution implements Execution {
   private active = true;
   private mg: Game;
   private ship: Unit | undefined;
-  private path: TileRef[] = [];
-  private pathIndex = 0;
+  private pathFinder: WaterPathFinder;
+  private motionPlanId = 1;
+  private motionPlanDst: TileRef | null = null;
+
+  private static _staggerCounter = 0;
 
   constructor(
     private origOwner: Player,
@@ -31,9 +36,16 @@ export class OilShipExecution implements Execution {
 
   init(mg: Game, ticks: number): void {
     this.mg = mg;
+    const stagger =
+      OilShipExecution._staggerCounter++ % WaterPathFinder.STAGGER_SPREAD;
+    this.pathFinder = new WaterPathFinder(mg, stagger, true); // memoized: extractor/port tile to tile repeats
   }
 
   tick(ticks: number): void {
+    if (this.pathFinder.rebuilt) {
+      this.motionPlanDst = null; // Force motion plan re-recording
+    }
+
     if (this.ship === undefined) {
       const spawn = this.origOwner.canBuild(UnitType.OilShip, this.src.tile());
       if (spawn === false) {
@@ -52,16 +64,6 @@ export class OilShipExecution implements Execution {
         targetUnit: this.dst,
       });
       this.ship.setOil(cargo);
-      this.path = straightLinePath(this.mg, spawn, this.dst.tile());
-      this.pathIndex = 0;
-      this.mg.recordMotionPlan({
-        kind: "grid",
-        unitId: this.ship.id(),
-        planId: 1,
-        startTick: ticks + 1,
-        ticksPerStep: 1,
-        path: this.path,
-      });
       this.mg.stats().boatSendTrade(this.origOwner, this.dst.owner());
     }
 
@@ -87,16 +89,48 @@ export class OilShipExecution implements Execution {
       return;
     }
 
-    if (this.pathIndex >= this.path.length) {
+    const curTile = this.ship.tile();
+    const dstTile = this.dst.tile();
+
+    if (curTile === dstTile) {
       this.complete();
       return;
     }
 
-    this.ship.move(this.path[this.pathIndex]);
-    this.pathIndex++;
+    const result = this.pathFinder.next(curTile, dstTile);
 
-    if (this.pathIndex >= this.path.length) {
-      this.complete();
+    switch (result.status) {
+      case PathStatus.NEXT: {
+        if (dstTile !== this.motionPlanDst) {
+          this.motionPlanId++;
+          const from = result.node;
+          const path = this.pathFinder.pathForTraversal(from, dstTile);
+
+          this.mg.recordMotionPlan({
+            kind: "grid",
+            unitId: this.ship.id(),
+            planId: this.motionPlanId,
+            startTick: ticks + 1,
+            ticksPerStep: 1,
+            path,
+          });
+          this.motionPlanDst = dstTile;
+        }
+        this.ship.move(result.node);
+        break;
+      }
+      case PathStatus.COMPLETE:
+        this.complete();
+        return;
+      case PathStatus.NOT_FOUND:
+        // No water route between src and dst (e.g. unconnected water
+        // bodies) - cargo is lost, same as any other failed trip.
+        console.warn("oil ship cannot find water route");
+        if (this.ship.isActive()) {
+          this.ship.delete(false);
+        }
+        this.active = false;
+        return;
     }
   }
 

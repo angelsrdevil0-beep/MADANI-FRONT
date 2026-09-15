@@ -41,6 +41,9 @@ describe("OilShip", () => {
     game.config().proximityBonusPortsNb = () => 0;
     game.config().tradeShipShortRangeDebuff = () => 0;
     game.config().tradeShipSpawnRate = () => 1;
+    // Ship spawning is now a flat interval rather than a probability - use
+    // a 1-tick interval so tests don't need to wait out the real 5s cadence.
+    game.config().oilShipSpawnIntervalTicks = () => 1;
   });
 
   test("does not spawn an oil ship from a landlocked extractor", () => {
@@ -124,7 +127,10 @@ describe("OilShip", () => {
     const goldBefore = player.gold();
     const otherGoldBefore = other.gold();
 
-    executeTicks(game, 20);
+    // Water-routed (not a straight line), and this map's two ports are
+    // close together - catch it a couple of ticks after spawn, still
+    // mid-flight, rather than assuming a long travel time.
+    executeTicks(game, 3);
     expect(port.oil()).toBeLessThan(3000);
     expect(game.unitCount(UnitType.OilShip)).toBe(1);
     const ship = game.units(UnitType.OilShip)[0];
@@ -132,8 +138,48 @@ describe("OilShip", () => {
     // than the 1000-capacity direct-from-extractor Oil Ship.
     expect(ship.oil()).toBe(3000);
 
-    executeTicks(game, 180);
+    executeTicks(game, 30);
     expect(player.gold()).toBeGreaterThan(goldBefore);
     expect(other.gold()).toBeGreaterThan(otherGoldBefore);
+  });
+
+  test("an oil ship only ever moves over water, never cutting across land", () => {
+    game.config().oilExtractorCapacity = () => 1000;
+    game.config().oilShipCapacity = () => 1000;
+
+    const srcTile = game.ref(7, 10);
+    player.conquer(srcTile);
+    constructionExecution(game, player, 7, 10, UnitType.OilExtractor);
+    const srcExtractor = player
+      .units(UnitType.OilExtractor)
+      .find((u) => u.tile() === srcTile);
+    if (srcExtractor === undefined) {
+      throw new Error("Source oil extractor was not built");
+    }
+    srcExtractor.setOil(game.config().oilExtractorCapacity());
+    game.config().oilExtractorRate = () => 0;
+
+    const dstTile = findShoreTile(game, srcTile);
+    other.conquer(dstTile);
+    other.buildUnit(UnitType.OilExtractor, dstTile, {});
+
+    const visited: TileRef[] = [];
+    for (let i = 0; i < 200; i++) {
+      executeTicks(game, 1);
+      const ships = game.units(UnitType.OilShip);
+      if (ships.length > 0) {
+        visited.push(ships[0].tile());
+      } else if (visited.length > 0) {
+        break; // shipment completed and the ship was deleted
+      }
+    }
+
+    expect(visited.length).toBeGreaterThan(0);
+    // Every tile the ship occupied mid-transit must be water (the src/dst
+    // endpoints themselves are the only land/shore tiles it should touch).
+    for (const t of visited) {
+      if (t === srcTile || t === dstTile) continue;
+      expect(game.isWater(t)).toBe(true);
+    }
   });
 });

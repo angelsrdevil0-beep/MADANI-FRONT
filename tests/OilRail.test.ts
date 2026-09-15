@@ -45,6 +45,11 @@ describe("OilExtractor domestic rail export", () => {
   });
 
   test("moves oil into the connected Port's stockpile once connected by rail", () => {
+    // Export only fires once the extractor's own tank is full - match its
+    // capacity to the seeded oil level rather than leaving it at the
+    // (much larger) real default.
+    game.config().oilExtractorCapacity = () => 1000;
+
     const extractorTile = game.ref(2, 2);
     expect(game.isShore(extractorTile)).toBe(false);
     player.conquer(extractorTile);
@@ -75,6 +80,37 @@ describe("OilExtractor domestic rail export", () => {
     expect(extractor.oil()).toBeLessThan(1000);
     expect(port.oil()).toBeGreaterThan(0);
     expect(extractor.oil() + port.oil()).toBe(1000);
+  });
+
+  test("does not export a partially-filled extractor - only once full", () => {
+    game.config().oilExtractorCapacity = () => 1000;
+
+    const extractorTile = game.ref(2, 2);
+    player.conquer(extractorTile);
+    constructionExecution(game, player, 2, 2, UnitType.OilExtractor);
+    const extractor = player
+      .units(UnitType.OilExtractor)
+      .find((u) => u.tile() === extractorTile);
+    if (extractor === undefined) {
+      throw new Error("Oil extractor was not built");
+    }
+    // Below the 1000 capacity - should sit untouched, not trickle to the Port.
+    extractor.setOil(500);
+
+    const factoryTile = findLandTile(game, [extractorTile]);
+    player.conquer(factoryTile);
+    const factory = player.buildUnit(UnitType.Factory, factoryTile, {});
+    game.addExecution(new FactoryExecution(factory));
+
+    const portTile = game.ref(7, 10);
+    player.conquer(portTile);
+    const port = player.buildUnit(UnitType.Port, portTile, {});
+    game.addExecution(new TrainStationExecution(port));
+
+    executeTicks(game, 30);
+
+    expect(extractor.oil()).toBe(500);
+    expect(port.oil()).toBe(0);
   });
 
   test("does not export without a nearby Factory (never becomes a station)", () => {
