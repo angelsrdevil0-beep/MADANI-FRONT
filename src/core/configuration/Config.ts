@@ -1023,6 +1023,20 @@ export class Config {
     return 1_000;
   }
 
+  // Ports collect rail-delivered oil from every connected extractor before
+  // it's exported, so their stockpile is sized larger than one extractor's.
+  portOilCapacity(): number {
+    return 10_000;
+  }
+
+  // A Port's own oil shipments are a consolidated load from (potentially)
+  // several rail-connected extractors, so the ship - and its cargo - is
+  // noticeably bigger than both a lone extractor's Oil Ship and a regular
+  // Trade Ship.
+  portOilShipCapacity(): number {
+    return 3_000;
+  }
+
   // Gold paid to EACH side (source and destination) per delivered oil
   // shipment - mirrors tradeShipGold() paying both ends identically.
   // Placeholder flat rate; real balance pass is a later stage.

@@ -10,6 +10,7 @@ export const missileSiloIcon = assetUrl("images/MissileSiloIconWhite.svg");
 export const oilExtractorIcon = assetUrl(
   "images/OilExtractorIconWhite.svg",
 );
+export const oilDropIcon = assetUrl("images/OilDropIcon.svg");
 export const hydrogenBombIcon = assetUrl("images/MushroomCloudIconWhite.svg");
 export const atomBombIcon = assetUrl("images/NukeIconWhite.svg");
 export const portIcon = assetUrl("images/PortIcon.svg");

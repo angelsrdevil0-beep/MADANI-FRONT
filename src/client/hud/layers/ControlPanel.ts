@@ -5,7 +5,7 @@ import { assetUrl } from "../../../core/AssetUrls";
 import { EventBus } from "../../../core/EventBus";
 import { ClientID } from "../../../core/Schemas";
 import { Config } from "../../../core/configuration/Config";
-import { GameMode, GameType, Gold } from "../../../core/game/Game";
+import { GameMode, GameType, Gold, UnitType } from "../../../core/game/Game";
 import { TileRef } from "../../../core/game/GameMap";
 import { GameUpdateType } from "../../../core/game/GameUpdates";
 import {
@@ -23,7 +23,7 @@ import {
 } from "../../Utils";
 import { GameView } from "../../view";
 import { PlayerView } from "../../view/PlayerView";
-import { goldCoinIcon, soldierIcon } from "../HotbarIcons";
+import { goldCoinIcon, oilDropIcon, soldierIcon } from "../HotbarIcons";
 import { TutorialHighlight, TutorialHighlightEvent } from "../Tutorial";
 const swordIcon = assetUrl("images/SwordIcon.svg");
 
@@ -55,6 +55,15 @@ export class ControlPanel extends LitElement implements Controller {
 
   @state()
   private _gold: Gold;
+
+  // Total oil currently stored across every Oil Extractor and Port this
+  // player owns (liters). Only shown once they've built an extractor - most
+  // players never touch this currency.
+  @state()
+  private _oil: number = 0;
+
+  @state()
+  private _hasOilExtractor: boolean = false;
 
   @state()
   private _attackingTroops: number = 0;
@@ -136,6 +145,12 @@ export class ControlPanel extends LitElement implements Controller {
     const config = this.game.config();
     this._maxTroops = config.maxTroops(player);
     this._gold = player.gold();
+    const oilExtractors = player.units(UnitType.OilExtractor);
+    this._hasOilExtractor = oilExtractors.length > 0;
+    this._oil = [...oilExtractors, ...player.units(UnitType.Port)].reduce(
+      (sum, u) => sum + u.oil(),
+      0,
+    );
     this._troops = player.troops();
     this._attackingTroops = player
       .outgoingAttacks()
@@ -557,6 +572,26 @@ export class ControlPanel extends LitElement implements Controller {
           <img src=${goldCoinIcon} width="13" height="13" class="shrink-0" />
           <span class="tabular-nums">${renderNumber(this._gold)}</span>
         </div>
+        ${this._hasOilExtractor
+          ? html`
+              <!-- Oil -->
+              <div
+                class="flex items-center gap-1 shrink-0 border rounded-md border-neutral-500 font-bold text-neutral-300 text-sm py-0.5 px-1 min-w-[4.5rem]"
+                translate="no"
+                title="${renderNumber(this._oil)} liters of oil"
+              >
+                <img
+                  src=${oilDropIcon}
+                  width="13"
+                  height="13"
+                  class="shrink-0"
+                />
+                <span class="tabular-nums"
+                  >${renderNumber(this._oil)}L</span
+                >
+              </div>
+            `
+          : ""}
       </div>
       <!-- Row 2: attack ratio | slider -->
       <div
@@ -619,6 +654,19 @@ export class ControlPanel extends LitElement implements Controller {
           <img src=${goldCoinIcon} width="13" height="13" />
           <span class="px-0.5">${renderNumber(this._gold)}</span>
         </div>
+        ${this._hasOilExtractor
+          ? html`
+              <!-- Oil -->
+              <div
+                class="flex items-center justify-center p-1 gap-0.5 border rounded-md border-neutral-500 font-bold text-neutral-300 text-xs shrink-0"
+                translate="no"
+                title="${renderNumber(this._oil)} liters of oil"
+              >
+                <img src=${oilDropIcon} width="13" height="13" />
+                <span class="px-0.5">${renderNumber(this._oil)}L</span>
+              </div>
+            `
+          : ""}
         <!-- Troop bar -->
         <div
           class="w-[40%] shrink-0 flex items-center ${this.tutorialHighlightClass(

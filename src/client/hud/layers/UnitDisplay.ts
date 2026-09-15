@@ -24,6 +24,7 @@ import {
   hydrogenBombIcon,
   mirvIcon,
   missileSiloIcon,
+  oilExtractorIcon,
   portIcon,
   samLauncherIcon,
   warshipIcon,
@@ -45,6 +46,7 @@ export class UnitDisplay extends LitElement implements Controller {
   private _defensePost = 0;
   private _samLauncher = 0;
   private _airport = 0;
+  private _oilExtractor = 0;
   private allDisabled = false;
   private _hoveredUnit: PlayerBuildableUnitType | null = null;
   private tutorialHighlight: PlayerBuildableUnitType | null = null;
@@ -126,6 +128,7 @@ export class UnitDisplay extends LitElement implements Controller {
     this._factories = player.totalUnitLevels(UnitType.Factory);
     this._warships = player.totalUnitLevels(UnitType.Warship);
     this._airport = player.totalUnitLevels(UnitType.Airport);
+    this._oilExtractor = player.totalUnitLevels(UnitType.OilExtractor);
     this.requestUpdate();
   }
 
@@ -201,6 +204,13 @@ export class UnitDisplay extends LitElement implements Controller {
             UnitType.Airport,
             "airport",
             this.keybinds["buildAirport"]?.key ?? "O",
+          )}
+          ${this.renderUnitItem(
+            oilExtractorIcon,
+            this._oilExtractor,
+            UnitType.OilExtractor,
+            "oil_extractor",
+            this.keybinds["buildOilExtractor"]?.key ?? "X",
           )}
           ${this.renderUnitItem(
             atomBombIcon,

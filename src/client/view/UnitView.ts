@@ -207,6 +207,9 @@ export class UnitView {
   troops(): number {
     return this.state.troops;
   }
+  oil(): number {
+    return this.state.oil;
+  }
   warshipState(): WarshipState {
     if (this._warshipState === undefined) {
       throw new Error("warshipState called on non-warship unit");

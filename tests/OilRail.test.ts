@@ -44,7 +44,7 @@ describe("OilExtractor domestic rail export", () => {
     game.config().oilExtractorRate = () => 0;
   });
 
-  test("exports oil to gold once connected by rail to an owned Port", () => {
+  test("moves oil into the connected Port's stockpile once connected by rail", () => {
     const extractorTile = game.ref(2, 2);
     expect(game.isShore(extractorTile)).toBe(false);
     player.conquer(extractorTile);
@@ -68,14 +68,13 @@ describe("OilExtractor domestic rail export", () => {
     const port = player.buildUnit(UnitType.Port, portTile, {});
     game.addExecution(new TrainStationExecution(port));
 
-    const goldBefore = player.gold();
-
     // A few ticks for the station-creation retry loop, then the throttled
     // (every 10 ticks) export check.
     executeTicks(game, 30);
 
     expect(extractor.oil()).toBeLessThan(1000);
-    expect(player.gold()).toBeGreaterThan(goldBefore);
+    expect(port.oil()).toBeGreaterThan(0);
+    expect(extractor.oil() + port.oil()).toBe(1000);
   });
 
   test("does not export without a nearby Factory (never becomes a station)", () => {

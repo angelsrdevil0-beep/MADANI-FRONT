@@ -1,5 +1,6 @@
 import { Execution, Game, Unit, UnitType } from "../game/Game";
 import { PseudoRandom } from "../PseudoRandom";
+import { OilShipExecution } from "./OilShipExecution";
 import { TradeShipExecution } from "./TradeShipExecution";
 import { TrainStationExecution } from "./TrainStationExecution";
 
@@ -10,6 +11,7 @@ export class PortExecution implements Execution {
   private random: PseudoRandom;
   private checkOffset: number;
   private tradeShipSpawnRejections = 0;
+  private oilShipSpawnRejections = 0;
 
   constructor(port: Unit) {
     this.port = port;
@@ -39,6 +41,8 @@ export class PortExecution implements Execution {
       this.createStation();
     }
 
+    this.maybeSpawnOilShip();
+
     // Only check every 10 ticks for performance.
     if ((this.mg.ticks() + this.checkOffset) % 10 !== 0) {
       return;
@@ -57,6 +61,45 @@ export class PortExecution implements Execution {
     const port = this.random.randElement(ports);
     this.mg.addExecution(
       new TradeShipExecution(this.port.owner(), this.port, port),
+    );
+  }
+
+  // Exports the Port's rail-collected oil stockpile (see
+  // OilExtractorExecution.maybeExportByRail) as a big consolidated shipment
+  // to a foreign trading Port - reuses the same weighted trading-partner
+  // list Trade Ship uses, since it's the same "foreign Port I can trade
+  // with" relationship, just carrying oil instead of nothing.
+  private maybeSpawnOilShip(): void {
+    if (this.port.oil() <= 0) {
+      return;
+    }
+    if ((this.mg.ticks() + this.checkOffset) % 10 !== 0) {
+      return;
+    }
+
+    const numOilShips = this.mg.unitCount(UnitType.OilShip);
+    const spawnRate = this.mg
+      .config()
+      .tradeShipSpawnRate(this.oilShipSpawnRejections, numOilShips);
+    if (!this.random.chance(spawnRate)) {
+      this.oilShipSpawnRejections++;
+      return;
+    }
+    this.oilShipSpawnRejections = 0;
+
+    const ports = this.tradingPorts();
+    if (ports.length === 0) {
+      return;
+    }
+
+    const dst = this.random.randElement(ports);
+    this.mg.addExecution(
+      new OilShipExecution(
+        this.port.owner(),
+        this.port,
+        dst,
+        this.mg.config().portOilShipCapacity(),
+      ),
     );
   }
 

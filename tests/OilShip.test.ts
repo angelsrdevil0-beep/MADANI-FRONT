@@ -1,3 +1,4 @@
+import { PortExecution } from "../src/core/execution/PortExecution";
 import {
   Game,
   Player,
@@ -102,5 +103,37 @@ describe("OilShip", () => {
     expect(player.gold()).toBeGreaterThan(goldBefore);
     expect(other.gold()).toBeGreaterThan(otherGoldBefore);
     expect(game.unitCount(UnitType.OilShip)).toBe(0);
+  });
+
+  test("a Port exports its rail-collected oil stockpile as a bigger Oil Ship", () => {
+    game.config().portOilShipCapacity = () => 3000;
+
+    const srcTile = game.ref(7, 10);
+    player.conquer(srcTile);
+    const port = player.buildUnit(UnitType.Port, srcTile, {});
+    game.addExecution(new PortExecution(port));
+    // Skip the rail-collection mechanics - set the stockpile directly, as
+    // if several extractors had already fed it via
+    // OilExtractorExecution.maybeExportByRail.
+    port.setOil(3000);
+
+    const dstTile = findShoreTile(game, srcTile);
+    other.conquer(dstTile);
+    other.buildUnit(UnitType.Port, dstTile, {});
+
+    const goldBefore = player.gold();
+    const otherGoldBefore = other.gold();
+
+    executeTicks(game, 20);
+    expect(port.oil()).toBeLessThan(3000);
+    expect(game.unitCount(UnitType.OilShip)).toBe(1);
+    const ship = game.units(UnitType.OilShip)[0];
+    // The port's shipment is a full 3000-capacity load, noticeably bigger
+    // than the 1000-capacity direct-from-extractor Oil Ship.
+    expect(ship.oil()).toBe(3000);
+
+    executeTicks(game, 180);
+    expect(player.gold()).toBeGreaterThan(goldBefore);
+    expect(other.gold()).toBeGreaterThan(otherGoldBefore);
   });
 });

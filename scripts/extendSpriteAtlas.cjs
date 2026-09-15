@@ -273,6 +273,35 @@ function extendAtlas(fileName, colWidth, draw) {
   );
 }
 
+// Redraws an EXISTING column in place (clears it to transparent first) -
+// unlike extendAtlas, this doesn't change the image's dimensions. Used to
+// revise a sprite that was already added by a prior extendAtlas call.
+function editColumn(fileName, colWidth, colIndex, draw) {
+  const atlasPath = path.join(ATLASES_DIR, fileName);
+  const original = fs.readFileSync(atlasPath);
+  const decoded = decodePng(original);
+  const bpp = 4;
+  const stride = decoded.width * bpp;
+  const colBase = colIndex * colWidth;
+  for (let y = 0; y < decoded.height; y++) {
+    for (let x = colBase; x < colBase + colWidth; x++) {
+      const o = y * stride + x * bpp;
+      decoded.pixels[o] = 0;
+      decoded.pixels[o + 1] = 0;
+      decoded.pixels[o + 2] = 0;
+      decoded.pixels[o + 3] = 0;
+    }
+  }
+  const image = { ...decoded, colBase };
+  draw(image, makeDrawTools(image));
+
+  const out = encodePng(image.width, image.height, image.pixels);
+  fs.writeFileSync(atlasPath, out);
+  console.log(
+    `wrote ${atlasPath}: redrew column ${colIndex} in place (${decoded.width}x${decoded.height})`,
+  );
+}
+
 // Prior columns (Airport icon, Commercial Aircraft sprite) were added the
 // same way this tool adds new ones — see git history for their draw
 // functions if another column needs the same treatment before the real
@@ -294,21 +323,32 @@ function drawOilExtractorIcon(image, tools) {
   fillCircle(bx, by, 5 * scale); // beacon
 }
 
-// Draws a small top-down ship silhouette (hull + midship tank) into the new
-// column, for Oil Ship. Used by UnitPass's unit-atlas.png. Renders in the
-// ground/sea bucket (like Trade Ship), not the missile bucket — see
-// UnitPass.ts's doc comment.
+// Draws a wide tanker silhouette (broad hull + three deck tanks) into the
+// column, for Oil Ship. Used by UnitPass's unit-atlas.png. Deliberately
+// wider than Trade Ship's 5x5 footprint - the whole point of a Port's
+// consolidated shipment is that it reads as visibly bigger than a regular
+// Trade Ship. Renders in the ground/sea bucket (like Trade Ship), not the
+// missile bucket — see UnitPass.ts's doc comment.
 function drawOilShip(image, tools) {
   const { setGray } = tools;
   const colBase = image.colBase;
   const LIGHT = 180;
   const DARK = 70;
-  // Hull (waterline), tapered at bow/stern.
-  for (let x = 3; x <= 9; x++) {
-    setGray(colBase + x, 7, LIGHT);
+  const hullRows = {
+    4: [5, 7],
+    5: [3, 9],
+    6: [2, 10],
+    7: [2, 10],
+    8: [2, 10],
+    9: [3, 9],
+  };
+  for (const [y, [x0, x1]] of Object.entries(hullRows)) {
+    for (let x = x0; x <= x1; x++) {
+      setGray(colBase + x, Number(y), LIGHT);
+    }
   }
-  // Midship tank/cabin, distinguishing the silhouette from Trade Ship's.
-  for (let x = 5; x <= 7; x++) {
+  // Three deck tanks (classic tanker silhouette), drawn over the hull.
+  for (const x of [3, 4, 6, 8, 9]) {
     setGray(colBase + x, 6, DARK);
   }
 }
@@ -319,8 +359,14 @@ function main() {
     extendAtlas("icon-atlas.png", 64, drawOilExtractorIcon);
   } else if (target === "unit") {
     extendAtlas("unit-atlas.png", 13, drawOilShip);
+  } else if (target === "unit-redraw-oilship") {
+    // Oil Ship is already column 13 (added by a prior "unit" run) - redraw
+    // it in place rather than appending yet another column.
+    editColumn("unit-atlas.png", 13, 13, drawOilShip);
   } else {
-    console.error("Usage: node scripts/extendSpriteAtlas.cjs <icon|unit>");
+    console.error(
+      "Usage: node scripts/extendSpriteAtlas.cjs <icon|unit|unit-redraw-oilship>",
+    );
     process.exit(1);
   }
 }

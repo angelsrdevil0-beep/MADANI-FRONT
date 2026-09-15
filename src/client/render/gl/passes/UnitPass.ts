@@ -34,9 +34,11 @@
  *   Col 10: Train Carriage (5×5)
  *   Col 11: Train Carriage Loaded (5×5)
  *   Col 12: Commercial Aircraft (7×7)
- *   Col 13: Oil Ship (5×5) — renders in the ground/sea bucket like Trade
- *   Ship, not the missile bucket; it's a boat, not a plane, despite both
- *   sharing the same straight-line-ignoring-terrain travel simplification.
+ *   Col 13: Oil Ship (9×6, wide tanker silhouette — deliberately bigger
+ *   than Trade Ship's 5×5, since a Port's shipment is a bigger, consolidated
+ *   load) — renders in the ground/sea bucket like Trade Ship, not the
+ *   missile bucket; it's a boat, not a plane, despite both sharing the same
+ *   straight-line-ignoring-terrain travel simplification.
  *
  * Data flow:
  *   FrameSnapshot.units → filter by typeToAtlasIdx → instance VBO → GPU

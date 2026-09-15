@@ -12,11 +12,14 @@ import { TrainStationExecution } from "./TrainStationExecution";
 //  - Domestic rail: the extractor becomes a real TrainStation (same
 //    Factory-gated connection machinery Port/City use - no shortcuts there),
 //    and once it's confirmed connected to one of the owner's own Ports in
-//    the same rail cluster, oil converts to gold directly rather than
-//    literally riding a visible Train unit. Domestic delivery has no travel
-//    risk (unlike the Oil Ship's foreign trip), so treating it as an
-//    instant conversion once connectivity is established is a deliberate
-//    simplification, not a shortcut on the connectivity logic itself.
+//    the same rail cluster, oil transfers into that Port's own stockpile
+//    rather than literally riding a visible Train unit - domestic delivery
+//    has no travel risk (unlike the Oil Ship's foreign trip), so treating
+//    the hop itself as instant once connectivity is established is a
+//    deliberate simplification, not a shortcut on the connectivity logic.
+//    The Port then exports its accumulated stockpile itself (see
+//    PortExecution.maybeSpawnOilShip) as a bigger, consolidated shipment -
+//    oil is never converted to gold at the extractor's own rail check.
 //    Airport is not wired into the rail network in this codebase at all
 //    (only City/Port/Factory are), so this stage only supports Port as the
 //    rail export destination - Airport-via-rail is a separate, similarly
@@ -88,22 +91,28 @@ export class OilExtractorExecution implements Execution {
     if (!cluster) {
       return;
     }
-    const ownedPort = [...cluster.stations].some(
+    const portStation = [...cluster.stations].find(
       (s) =>
-        s.isActive() && s.unit.type() === UnitType.Port && s.unit.owner() === owner,
+        s.isActive() &&
+        s.unit.type() === UnitType.Port &&
+        s.unit.owner() === owner,
     );
-    if (!ownedPort) {
+    if (!portStation) {
       return;
     }
 
+    const port = portStation.unit;
+    const capacity = this.mg.config().portOilCapacity();
+    if (port.oil() >= capacity) {
+      return;
+    }
     const cargo = Math.min(
       this.extractor.oil(),
-      this.mg.config().oilShipCapacity(),
+      capacity - port.oil(),
+      this.mg.config().oilShipCapacity(), // one chunk per check, not the whole tank at once
     );
     this.extractor.setOil(this.extractor.oil() - cargo);
-    const gold = this.mg.config().oilShipGold(cargo, owner);
-    owner.addGold(gold, this.extractor.tile());
-    owner.addTradeGold(gold);
+    port.setOil(port.oil() + cargo);
   }
 
   private produce(): void {
@@ -150,7 +159,12 @@ export class OilExtractorExecution implements Execution {
 
     const dst = this.random.randElement(extractors);
     this.mg.addExecution(
-      new OilShipExecution(this.extractor.owner(), this.extractor, dst),
+      new OilShipExecution(
+        this.extractor.owner(),
+        this.extractor,
+        dst,
+        this.mg.config().oilShipCapacity(),
+      ),
     );
   }
 

@@ -1823,7 +1823,7 @@ export class PlayerImpl implements Player {
   }
 
   oilShipSpawn(targetTile: TileRef): TileRef | false {
-    return this.units(UnitType.OilExtractor).find(
+    return this.units(UnitType.OilExtractor, UnitType.Port).find(
       (u) => u.tile() === targetTile,
     )
       ? targetTile

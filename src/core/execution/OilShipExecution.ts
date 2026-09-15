@@ -3,12 +3,18 @@ import { TileRef } from "../game/GameMap";
 import { straightLinePath } from "../pathfinding/StraightLinePath";
 
 // Mirrors AirportPlaneExecution: a free auto-spawned trade unit that
-// travels a straight line (ignoring terrain, like the trade plane) between
-// two OilExtractors and pays gold to both sides on arrival. Cargo is
-// deducted from the source extractor at spawn time (not refunded if the
-// trip fails) and carried on the ship's own oil() field, so its size is
-// whatever the extractor had on hand, capped at the ship's capacity - not
-// always a full load.
+// travels a straight line (ignoring terrain, like the trade plane) and pays
+// gold to both sides on arrival. Two independent origins share this class:
+//   - A water-adjacent OilExtractor shipping straight to a foreign
+//     OilExtractor (OilExtractorExecution.maybeSpawnOilShip) - the original
+//     direct-export path.
+//   - A Port shipping its rail-collected oil stockpile to a foreign Port
+//     (PortExecution.maybeSpawnOilShip) - a bigger, consolidated load from
+//     potentially several rail-connected extractors, so `cargoCapacity` is
+//     larger and the ship renders bigger too (see UnitPass.ts).
+// Cargo is deducted from the source at spawn time (not refunded if the trip
+// fails) and carried on the ship's own oil() field, so its size is whatever
+// the source had on hand, capped at cargoCapacity - not always a full load.
 export class OilShipExecution implements Execution {
   private active = true;
   private mg: Game;
@@ -18,8 +24,9 @@ export class OilShipExecution implements Execution {
 
   constructor(
     private origOwner: Player,
-    private srcExtractor: Unit,
-    private dstExtractor: Unit,
+    private src: Unit,
+    private dst: Unit,
+    private cargoCapacity: number,
   ) {}
 
   init(mg: Game, ticks: number): void {
@@ -28,30 +35,24 @@ export class OilShipExecution implements Execution {
 
   tick(ticks: number): void {
     if (this.ship === undefined) {
-      const spawn = this.origOwner.canBuild(
-        UnitType.OilShip,
-        this.srcExtractor.tile(),
-      );
+      const spawn = this.origOwner.canBuild(UnitType.OilShip, this.src.tile());
       if (spawn === false) {
         console.warn(`cannot build oil ship`);
         this.active = false;
         return;
       }
-      const cargo = Math.min(
-        this.srcExtractor.oil(),
-        this.mg.config().oilShipCapacity(),
-      );
+      const cargo = Math.min(this.src.oil(), this.cargoCapacity);
       if (cargo <= 0) {
         this.active = false;
         return;
       }
-      this.srcExtractor.setOil(this.srcExtractor.oil() - cargo);
+      this.src.setOil(this.src.oil() - cargo);
 
       this.ship = this.origOwner.buildUnit(UnitType.OilShip, spawn, {
-        targetUnit: this.dstExtractor,
+        targetUnit: this.dst,
       });
       this.ship.setOil(cargo);
-      this.path = straightLinePath(this.mg, spawn, this.dstExtractor.tile());
+      this.path = straightLinePath(this.mg, spawn, this.dst.tile());
       this.pathIndex = 0;
       this.mg.recordMotionPlan({
         kind: "grid",
@@ -61,7 +62,7 @@ export class OilShipExecution implements Execution {
         ticksPerStep: 1,
         path: this.path,
       });
-      this.mg.stats().boatSendTrade(this.origOwner, this.dstExtractor.owner());
+      this.mg.stats().boatSendTrade(this.origOwner, this.dst.owner());
     }
 
     if (!this.ship.isActive()) {
@@ -69,21 +70,18 @@ export class OilShipExecution implements Execution {
       return;
     }
 
-    const dstOwner = this.dstExtractor.owner();
+    const dstOwner = this.dst.owner();
 
-    // If a player captures another player's extractor while shipping, delete
-    // the ship without paying out (mirrors AirportPlaneExecution's same
-    // guard) - the cargo is simply lost, same as if it were intercepted.
-    if (dstOwner.id() === this.srcExtractor.owner().id()) {
+    // If a player captures the destination while shipping, delete the ship
+    // without paying out (mirrors AirportPlaneExecution's same guard) - the
+    // cargo is simply lost, same as if it were intercepted.
+    if (dstOwner.id() === this.src.owner().id()) {
       this.ship.delete(false);
       this.active = false;
       return;
     }
 
-    if (
-      !this.dstExtractor.isActive() ||
-      !this.ship.owner().canTrade(dstOwner)
-    ) {
+    if (!this.dst.isActive() || !this.ship.owner().canTrade(dstOwner)) {
       this.ship.delete(false);
       this.active = false;
       return;
@@ -106,21 +104,13 @@ export class OilShipExecution implements Execution {
     this.active = false;
     const cargo = this.ship!.oil();
     this.ship!.delete(false);
-    const gold = this.mg
-      .config()
-      .oilShipGold(cargo, this.srcExtractor.owner());
+    const gold = this.mg.config().oilShipGold(cargo, this.src.owner());
 
-    this.srcExtractor.owner().addGold(gold, this.srcExtractor.tile());
-    this.dstExtractor.owner().addGold(gold, this.dstExtractor.tile());
-    this.srcExtractor.owner().addTradeGold(gold);
-    this.dstExtractor.owner().addTradeGold(gold);
-    this.mg
-      .stats()
-      .boatArriveTrade(
-        this.srcExtractor.owner(),
-        this.dstExtractor.owner(),
-        gold,
-      );
+    this.src.owner().addGold(gold, this.src.tile());
+    this.dst.owner().addGold(gold, this.dst.tile());
+    this.src.owner().addTradeGold(gold);
+    this.dst.owner().addTradeGold(gold);
+    this.mg.stats().boatArriveTrade(this.src.owner(), this.dst.owner(), gold);
   }
 
   isActive(): boolean {
