@@ -25,6 +25,8 @@ something material changes — don't let it go stale.
   - `2b10872` — Stage 5: geography-weighted oil yield
   - `02cb46f` — HANDOFF.md update
   - `f890c76` — Stage 6: client wiring (build menu, sprites, storage bar)
+  - `0b0aba4` — HANDOFF.md update
+  - `e0410c9` — Post-Stage-6 fixes: shape bug, rail redesign, Oil HUD
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -365,6 +367,77 @@ stage (unrelated - never touched). Live-verified in the browser (see
 above) rather than just trusting the automated checks, since this was
 UI-facing work.
 
+**Post-Stage-6 fixes (commit `e0410c9`)**: the user tested Stage 6 in a
+real game and reported four things — one real rendering bug, one missing
+registration spot, one deliberate mechanic they didn't like, and one
+missing feature. All four addressed in one pass:
+
+1. **Airport/OilExtractor rendered as a triangle, and Airport looked
+   "half-cut" while under construction.** Root cause:
+   `structure.frag.glsl`'s `shapeSDF()` hardcodes a shape per atlas
+   column with exactly 6 explicit branches (City/Port/Factory/
+   DefensePost/SAM/Silo); the *last* branch (Missile Silo's triangle)
+   doubles as the unconditional fallback for anything with a higher
+   atlas index. Airport (column 6, added Phase 1) and Oil Extractor
+   (column 7, added Stage 6) both silently fell into that triangle
+   branch — nobody had added their own circle case. The "half-cut
+   during construction" report was the same bug wearing a different
+   hat: the white icon glyph is clipped against `sdf` (the shape mask),
+   so a triangle-shaped mask chops off whatever part of a
+   roughly-circular icon sticks outside a triangle. One fix (two new
+   explicit circle branches) resolved both symptoms. **Lesson for next
+   time a structure atlas column is added: `shapeSDF()` in
+   `structure.frag.glsl` needs an explicit branch too — the fallthrough
+   silently "succeeds" (renders *something*) so tests and `tsc` won't
+   catch a missing one.**
+2. **Oil Extractor was missing from the bottom hotbar.** Found a THIRD
+   separate place new buildable units must be registered:
+   `UnitDisplay.ts` (the hotbar strip) keeps its own explicit per-type
+   fields/render calls, independent of both `BuildMenu.ts`'s
+   `buildTable` and the render layer's `UnitType.ts` — missed in Stage
+   6's already-long list of touch points.
+3. **Rail export redesigned.** The user disliked oil converting straight
+   to gold the instant it reached a rail-connected Port ("it started
+   giving me money every seconds"). Changed to: oil now accumulates in
+   the Port's own stockpile (reusing the generic `Unit.oil()` field),
+   and the Port itself periodically exports that stockpile as one big,
+   visibly-wider-hulled Oil Ship shipment to a foreign trading Port
+   (`PortExecution.maybeSpawnOilShip`, reusing `tradingPorts()`'s
+   existing weighted-partner logic) — bigger cargo cap (3,000 vs the
+   direct-from-extractor ship's 1,000) and a redrawn sprite spanning
+   most of the 13×13 unit-atlas cell instead of the original compact
+   one. `OilShipExecution` now takes an explicit `cargoCapacity` so
+   both origins (Stage 3's direct coastal-extractor ship, this new
+   Port-collected one) share the one implementation.
+4. **New Oil currency indicator** in the player HUD
+   (`ControlPanel.ts`) — black droplet icon, "L" (liters) suffix, sum of
+   `oil()` across every owned OilExtractor + Port, shown once the player
+   has built at least one extractor.
+
+Verified: `tsc`/lint clean, full suite green (only the recurring
+unrelated `InventoryModal.test.ts` flakiness), and the two new atlas
+sprite edits (bigger Oil Ship) were pixel-verified by decoding the PNG
+directly, same as every prior atlas change this project. Could **not**
+get a clean live screenshot of the circle-shape fix this round — the
+Browser pane stayed at a narrow (~457px) width for the whole session
+despite `resize_window` calls (the WebGL canvas doesn't appear to
+respond to a runtime viewport change without a reload), which also hid
+the desktop-layout hotbar. Did confirm via the DOM that the hotbar's
+Oil Extractor entry renders (`find("oil")` located it) and via the
+ctrl+click grid build menu (real Lit DOM, unaffected by the narrow
+pane) that nothing regressed. **If picking this up again and a visual
+check matters, try a fresh session/reload before fighting the pane
+width.**
+
+`scripts/extendSpriteAtlas.cjs` gained a second capability while making
+the sprite bigger: `editColumn()` redraws an *existing* atlas column in
+place (clears it, redraws, keeps the file's dimensions) as opposed to
+`extendAtlas()` which always appends a new one — needed here since the
+Oil Ship column already existed from Stage 6 and re-running the old
+"unit" target would have appended a stray, unused 15th column instead
+of revising the 14th. Invoked via a new third CLI mode,
+`unit-redraw-oilship`.
+
 ## Known issues (found while testing in-browser, not yet fixed)
 
 - **Bots never build Airports**, so no Commercial Aircraft trade ever
@@ -379,6 +452,13 @@ UI-facing work.
   dev-server UI. Almost certainly IDM's browser download-monitor
   misfiring on the game's normal Howler.js audio-asset requests, not a
   code bug — no action taken.
+- The dev build fires a request to a third-party domain
+  (`introjava.com`, blocked by CORS in this dev environment so no data
+  actually leaves) — surfaced in the console during this round's
+  testing. Looks like an ad/monetization-stub call from the closed-source
+  API layer (not in this repo), not something introduced by any Oil
+  stage. Flagging in case it's unexpected; harmless as observed (request
+  never succeeds).
 
 ## What got explicitly descoped
 
