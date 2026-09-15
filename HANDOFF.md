@@ -36,6 +36,8 @@ something material changes — don't let it go stale.
   - `30f1a5c` — HANDOFF.md update
   - `c71d16b` — Fix: phantom half-filled health bar on Oil Extractor
     (BarPass.ts)
+  - `7872310` — Bots now consider water-near-shore OilExtractor placement
+  - `73e9259` — Balance pass: Oil Ship payout scales with distance traveled
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -678,6 +680,59 @@ other GL render pass in this codebase (`StructurePass`,
 either), it needs a constructed `WebGL2RenderingContext` and is
 verified live instead, consistent with prior stages' approach to render
 bugs (e.g. the shapeSDF triangle/circle fix).
+
+**Follow-up cleanup pass — bot water placement, distance-aware oil
+payout, live level-digit check (commits `7872310`, `73e9259`)**: three
+smaller items the user asked for in one go after the health-bar fix.
+
+1. **Bots now consider water-near-shore OilExtractor placement**
+   (`7872310`). `structureSpawnTile()` only ever sampled land tiles for
+   OilExtractor, so bots never used the water-near-own-shore option a
+   human player has (`PlayerImpl.oilExtractorSpawn()` already supported
+   it, per Stage 2). Added `randOilExtractorWaterTileArray()` - BFS from
+   a handful of the player's own shore tiles out to
+   `oilExtractorWaterRange()`, mirroring `randCoastalTileArray()`'s
+   existing pattern - and mixed its candidates in alongside the land
+   ones in `structureSpawnTile()`. New test uses the real simulation
+   (`tests/NationStructureBehavior.test.ts`), since BFS/isShore/isWater
+   need real geography, not hand-mocks.
+2. **Balance pass: Oil Ship payout now scales with distance**
+   (`73e9259`). `oilShipGold()` was a flat `cargo * 40` rate with no
+   distance term - the one number explicitly flagged as a placeholder
+   since Stage 3 - unlike every other trade mechanic in this game
+   (`tradeShipGold`'s sigmoid explicitly rewards long hauls and punishes
+   short ones via `tradeShipShortRangeDebuff`). Two OilExtractors built
+   right next to each other paid exactly as well as a genuine cross-map
+   route. `OilShipExecution` now tracks `tilesTraveled` (mirroring
+   `TradeShipExecution`'s own counter) and `oilShipGold()` applies a
+   simple linear 0.5x-1.5x multiplier pivoting around
+   `tradeShipShortRangeDebuff` - deliberately simpler than
+   `tradeShipGold`'s sigmoid (linear, not S-shaped), reusing the same
+   reference distance rather than inventing an oil-specific one. Caught
+   and guarded a div-by-zero: several existing tests zero out
+   `tradeShipShortRangeDebuff` entirely, which would have produced NaN
+   gold - falls back to a neutral 1x multiplier when the debuff is 0.
+   Explicitly still a first pass (like the ratios/ranges from the
+   previous stage) - revisit after real multiplayer play. Capacities and
+   the extraction rate itself were left untouched: no signal they're
+   broken, and they were already deliberately designed in Stages 2/5.
+3. **Live level-digit check** - no code change, verification only.
+   Built and leveled a real Oil Extractor up to level 13 in a live game
+   (Browser pane, same technique as the health-bar fix session) and
+   confirmed visually: correct circle shape, "13" rendering in the right
+   position via `StructureLevelPass`'s fixed atlas order, and exactly
+   one bar below the icon (green, since oil was full) with no phantom
+   bar above - all three fixes from this and the prior session working
+   together correctly. Didn't repeat the same check for a leveled
+   Airport since the underlying fix (`STRUCTURE_ORDER`) is shared code
+   already proven correct by the OilExtractor check.
+
+Verified: `tsc --noEmit` clean, lint clean, full suite green except the
+same pre-existing `InventoryModal.test.ts` flakiness.
+`NationGoldPerMinute`'s snapshot updated again for the distance-aware
+payout shift (shipsArrived 3473→2971, tradeGold 644.6M→573.2M - fewer,
+better-paying trips on average, consistent with short hops now paying
+less).
 
 ## Known issues (found while testing in-browser, not yet fixed)
 
