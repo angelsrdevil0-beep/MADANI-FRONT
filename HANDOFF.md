@@ -17,6 +17,8 @@ something material changes — don't let it go stale.
   - `86b04cc` — Stage 1: Commercial Aircraft now renders on the map
   - `dbc2d49` — HANDOFF.md update
   - `d355f5e` — Stage 2: Oil Extractor core data model
+  - `d2317ad` — HANDOFF.md update
+  - `9909d4c` — Stage 3: Oil Ship + export economy
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -102,6 +104,77 @@ full suite has the same 6 pre-existing unrelated client-test failures
 (`CosmeticsPaymentsMigration.test.ts`, `InventoryModal.test.ts` — jsdom
 navigation/timeout flakiness) confirmed present on baseline via
 `git stash` before these changes existed.
+
+**Stage 3 — Oil Ship + export economy (commit `9909d4c`)**: new
+`UnitType.OilShip`, the first working oil→gold conversion path. Design
+clarification made while implementing (not previously nailed down in the
+spec): the user's "traded by rails OR an oil ship" is two **independent**
+export paths, not sequential — Oil Ship is a direct extractor-to-extractor
+shipment (this stage), separate from the domestic-rail-to-Port/Airport
+path (Stage 4), not "rail feeds a ship."
+
+- `OilShipExecution.ts` (new file): near-verbatim mirror of
+  `AirportPlaneExecution.ts` — same straight-line travel
+  (`straightLinePath`, ignores terrain, same simplification rationale as
+  the trade plane: no naval pathfinder needed), same capture/inactive
+  destination guards, same "pay gold to both ends on arrival" structure.
+  Differs in one place: cargo is a real carried quantity, not a
+  distance-computed abstraction, so it's deducted from the source
+  extractor's `oil()` at departure and stored on the ship's own `oil()`
+  field (reusing the Stage 2 field) rather than tracked as a private
+  class member. **Not refunded if the trip fails** (capture/embargo
+  mid-flight) — cargo is simply lost, a deliberate simplification.
+- `OilExtractorExecution.ts`: gained a periodic spawn check mirroring
+  `AirportExecution`'s (`shouldSpawnOilShip()`/`tradingExtractors()`,
+  reusing the existing `tradeShipSpawnRate`/`tradeShipSaturation`/
+  `tradeShipShortRangeDebuff`/`proximityBonusPortsNb` config curves rather
+  than inventing oil-specific ones — Stage 7 balance pass can split them
+  out later if needed). **Gated on water contact**
+  (`isWater(tile) || isShore(tile))`: a landlocked extractor never spawns
+  ships and just accumulates oil until Stage 4's rail exists. Note
+  production keeps running between shipments, so a busy trade route sees
+  a steady trickle of small shipments, not one-and-done — confirmed via
+  test debugging, not a bug.
+- `Config.ts`: `oilShipCapacity()` (1,000, smaller than the extractor's
+  5,000 cap per spec) and `oilShipGold(cargo, player)` (flat 40
+  gold/unit/side placeholder, mirrors `tradeShipGold`'s public-wrapper
+  pattern so it can apply the private `goldMultiplierFor` cheat/host
+  multiplier).
+- `PlayerImpl.oilShipSpawn()`: mirrors `airportTradeSpawn`/
+  `tradeShipSpawn` — just checks the tile has the player's own
+  OilExtractor.
+- `tests/OilShip.test.ts`: landlocked extractor never spawns a ship
+  (200 ticks, confirmed zero); a water-adjacent extractor departs with
+  cargo (oil drops immediately, before arrival), travels, and pays gold
+  to both sides — capacity/production pinned equal+paused in that test so
+  exactly one shipment happens, avoiding a race against ongoing
+  production when asserting the ship count hits zero again.
+
+Still not wired to rail (Stage 4) or the client (Stage 6).
+
+Verified the same way as Stage 2: `npx tsc --noEmit` clean, `npm run
+lint` clean, new tests pass, full suite's only failures are pre-existing
+flaky `tests/client/*` files (`CosmeticsPaymentsMigration.test.ts`,
+`InventoryModal.test.ts`, and this run also `Auth.steam.test.ts`) —
+confirmed unrelated to these changes: none of those files touch
+core-sim code, and `Auth.steam.test.ts` passes standalone both with and
+without these changes, only flaking under full-suite parallel load
+(a pre-existing timing race, not a regression).
+
+## Known issues (found while testing in-browser, not yet fixed)
+
+- **Bots never build Airports**, so no Commercial Aircraft trade ever
+  happens between/with bots — only human-built airports trade. Confirmed
+  in `src/core/execution/nation/NationStructureBehavior.ts`: its
+  structure-type list includes `UnitType.Port` but not `UnitType.Airport`.
+  Pre-existing gap from Phase 1, not something any Oil stage touched.
+  Will very likely also apply to `UnitType.OilExtractor` once bots are
+  in play — relevant to Stage 8 (optional bot AI economy) and worth
+  fixing for Airport too if the user wants bot trade to actually work.
+- User also saw an IDM ("download mp3") popup while clicking around the
+  dev-server UI. Almost certainly IDM's browser download-monitor
+  misfiring on the game's normal Howler.js audio-asset requests, not a
+  code bug — no action taken.
 
 ## What got explicitly descoped
 
@@ -244,10 +317,7 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **0. Cleanup** — done, commit `c54168c`.
 - [x] **1. Render Commercial Aircraft** — done, commit `86b04cc`.
 - [x] **2. Oil core data model + Oil Extractor** — done, commit `d355f5e`.
-- [ ] **3. Oil Ship + export economy** (~45-60 min) — new
-      `UnitType.OilShip`, auto-spawned, smaller capacity than Commercial
-      Aircraft, drains the source extractor's storage per trip, pays gold
-      on delivery. Mirrors `AirportPlaneExecution.ts` closely.
+- [x] **3. Oil Ship + export economy** — done, commit `9909d4c`.
 - [ ] **4. Domestic rail integration** (~60-90 min, most uncertain
       estimate — haven't read `TrainStation.ts`/`RailNetworkImpl.ts` yet)
       — extractors feed oil into the existing domestic rail network toward
