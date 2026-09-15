@@ -21,6 +21,8 @@ something material changes — don't let it go stale.
   - `9909d4c` — Stage 3: Oil Ship + export economy
   - `c2d4870` — HANDOFF.md update
   - `26848ab` — Stage 4: domestic rail export
+  - `af3a9b4` — HANDOFF.md update
+  - `2b10872` — Stage 5: geography-weighted oil yield
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -226,6 +228,70 @@ visibly a *rotating* set of unrelated files failing between runs
 `MainInitialize`/`InventoryModal` on the next) — a timing/resource race
 under full parallel load, not a regression from these changes.
 
+**Stage 5 — Geography-weighted oil yield (commit `2b10872`)**: closes the
+last open item from the original design decisions — extraction rate now
+varies by real-world oil geography instead of being flat everywhere.
+
+Key research finding: `map-generator/assets/maps/<id>/info.json`'s
+`nations[].coordinates` (pixel positions of nation labels) are consumed
+**directly, unscaled**, as tile coordinates by
+`NationCreation.ts` (`new Cell(n.coordinates[0], n.coordinates[1])`) —
+confirmed by reading `TerrainMapLoader.ts`, whose `GameMapSize.Compact`
+path explicitly **halves** those same coordinates before use, meaning
+"Normal" size is 1:1 with info.json as-is. This made the calibration
+straightforward: pick 3 real nations from a map's own info.json, pair
+each with its real-world lat/lon (general knowledge), solve the 3x3
+affine system once (`solve3x3`/Cramer's rule) to get a pixel→lat/lon
+transform for that map, then score any tile by proximity (in that
+lat/lon space) to a hand-compiled table of real major oil
+fields/regions.
+
+- `src/core/configuration/OilGeography.ts` (new file): `OIL_FIELDS`
+  table (Ghawar/Persian Gulf, Rumaila, Zakum, West Siberian Basin,
+  Permian Basin, Gulf of Mexico, Orinoco Belt, Niger Delta, North Sea,
+  Tengiz — weighted roughly by real output, not survey-accurate) +
+  `MAP_CALIBRATION` (3-anchor affine per map) + `oilYieldMultiplier()`,
+  clamped to [0.5, 5]×.
+- **Calibrated maps**: World, Middle East, Mena, Africa — the ones
+  covering the regions the user named (Persian Gulf, plus Africa for the
+  Niger Delta). Every other map (abstract, small-arena, non-Earth like
+  Mars/Luna/Sol, etc.) falls back to a flat 1× multiplier, unchanged
+  from before this stage. **Extending coverage to another map is just
+  adding one more `MAP_CALIBRATION` entry** — 3 anchors pulled from that
+  map's own info.json, no other code changes needed.
+- **Determinism care, worth remembering for any future core-sim math**:
+  `src/core` must produce bit-identical results on every client (hash
+  comparison). `Math.exp`/`Math.cos`/etc. are only spec'd as
+  "implementation approximated" (can differ per JS engine) — see
+  `DetMath.ts`'s own doc comment, which the codebase already uses
+  elsewhere (`Config.tradeShipGold`). This module uses `DetMath.exp()`
+  instead of `Math.exp()`, and deliberately drops the usual
+  `cos(lat)`-scaled longitude distance correction (a minor accuracy
+  trade, fine since every calibrated map/field is far from the poles)
+  to avoid `Math.cos` entirely rather than hand-rolling a deterministic
+  cosine for this. `Math.sqrt`/`Math.min`/`Math.max`/`Math.floor` are
+  IEEE-754-required to be exact, so those stayed as-is.
+- `Config.oilExtractorRate()` signature changed from zero-arg to
+  `(px, py)` — multiplies a flat base rate (still 2/tick) by
+  `oilYieldMultiplier()`. Normalizes for `GameMapSize.Compact`'s
+  coordinate-halving internally (doubles px/py back before calibration
+  lookup) so callers never need to think about map size.
+  `OilExtractorExecution.produce()` passes `mg.x(tile)`/`mg.y(tile)`.
+  Existing tests that stubbed the old zero-arg signature
+  (`game.config().oilExtractorRate = () => 5`) needed no changes — JS
+  ignores extra call-site arguments.
+- Tests: `tests/OilGeography.test.ts` (5, pure-function: flat baseline
+  for uncalibrated maps, Ghawar-proximity scores higher than a
+  far-away point on both World and Africa maps, deterministic,
+  stays in bounds) + `tests/OilExtractorRate.test.ts` (2: Compact-size
+  normalization produces the same rate as the equivalent Normal-size
+  point, and geography multiplies rather than replaces the base rate).
+
+Verified the same way as every prior stage: `tsc --noEmit` clean, lint
+clean, all 16 Oil-related tests pass, full suite's only failure is the
+same recurring `tests/client/InventoryModal.test.ts` flakiness seen in
+every stage so far (still unrelated - never touched that file).
+
 ## Known issues (found while testing in-browser, not yet fixed)
 
 - **Bots never build Airports**, so no Commercial Aircraft trade ever
@@ -384,9 +450,7 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **2. Oil core data model + Oil Extractor** — done, commit `d355f5e`.
 - [x] **3. Oil Ship + export economy** — done, commit `9909d4c`.
 - [x] **4. Domestic rail integration** — done, commit `26848ab`.
-- [ ] **5. Geography-based yield weighting** (~45-75 min) — per-map
-      affine calibration + real oil-region table, scoped to the maps where
-      it matters; flat elsewhere. See the geography section above.
+- [x] **5. Geography-based yield weighting** — done, commit `2b10872`.
 - [ ] **6. Client wiring** (~30-45 min) — icons, build menu, i18n
       (remember `tests/EnJsonSorted.test.ts` enforces alphabetical order),
       keybind, and a storage-level indicator UI (no existing "fill bar"
