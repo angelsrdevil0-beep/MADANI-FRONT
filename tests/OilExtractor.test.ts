@@ -85,4 +85,40 @@ describe("OilExtractor", () => {
     executeTicks(game, 10);
     expect(extractor.oil()).toBe(20);
   });
+
+  test("is upgradable, and a higher level fills the same-size tank faster", () => {
+    expect(game.config().unitInfo(UnitType.OilExtractor).upgradable).toBe(
+      true,
+    );
+
+    game.config().oilExtractorCapacity = () => 1000;
+    game.config().oilExtractorRate = () => 5;
+
+    player.conquer(game.ref(7, 10));
+    constructionExecution(game, player, 7, 10, UnitType.OilExtractor);
+
+    const extractor = player
+      .units(UnitType.OilExtractor)
+      .find((u) => u.tile() === game.ref(7, 10));
+    if (extractor === undefined) {
+      throw new Error("Oil extractor was not built");
+    }
+    extractor.setOil(0);
+    expect(extractor.level()).toBe(1);
+
+    executeTicks(game, 1);
+    const level1Gain = extractor.oil();
+    expect(level1Gain).toBe(5);
+
+    extractor.setOil(0);
+    extractor.increaseLevel();
+    extractor.increaseLevel();
+    extractor.increaseLevel();
+    expect(extractor.level()).toBe(4);
+
+    executeTicks(game, 1);
+    // 4x the rate, same tank size - not a bigger tank, a faster fill.
+    expect(extractor.oil()).toBe(level1Gain * 4);
+    expect(game.config().oilExtractorCapacity()).toBe(1000);
+  });
 });

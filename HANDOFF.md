@@ -30,6 +30,9 @@ something material changes — don't let it go stale.
   - `1aef1cf` — HANDOFF.md update
   - `2f86174` — Pre-Stage-7 bugfix pass: export timing/spam, water-only
     Oil Ship pathing, bot AI Airport/OilExtractor support
+  - `65a3225` — HANDOFF.md update
+  - (uncommitted at time of writing) — Stage 7: OilExtractor leveling
+    (stacking), StructureLevelPass render fix, full verification
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -522,6 +525,96 @@ anyway). If picking this up again, a real multiplayer/bot game would be
 the way to visually confirm bots now build airports/extractors and ships
 hug the coastline.
 
+**Stage 7 — stacking/leveling + full verification (uncommitted at time of
+writing)**: the user asked for two things before finishing Stage 7: make
+Airport and OilExtractor "stackable" (their words) — either build several
+side by side, or upgrade one in place — and make sure the bot AI actually
+uses that. Plus the originally-planned Stage 7 verification pass.
+
+Key finding: **Airport already fully supported this.** It's had
+`upgradable: true` in `Config.unitInfo()` since Phase 1, and
+`AirportExecution.shouldSpawnTradePlane()`/`tradingAirports()` already
+loop `airport.level()` times (mirroring `PortExecution` exactly) — a
+level-5 Airport already got 5x the trade-plane spawn attempts and 5x the
+destination-selection weight. It just... never got exercised, since
+nothing before this stage ever leveled one up. So Airport needed no core
+changes.
+
+**OilExtractor did need the core change**, since it was deliberately built
+non-upgradable in Stage 2 (see the original design decision above — "not
+upgradable... capacity scales by building more extractors"). The user's
+own framing settled the ambiguity: building several extractors side by
+side and leveling up one extractor are meant to be two **different**
+scaling strategies, not the same thing achieved two ways — "5 next to each
+producing 5x oil in a long time" (more separate tanks = more total oil
+over time, already true, no change needed) vs. "5 on each other that
+produce 1x oil in 1/5x time" (one tank, same size, filled 5x faster).
+Implemented literally: `Config.ts`'s `OilExtractor` entry gained
+`upgradable: true` (its existing cost curve — `costWrapper` keyed on
+`unitsOwned(OilExtractor)` — already applies to upgrades for free, same
+mechanism Port/City/Factory/Airport/SAM/Silo all already use, confirmed by
+reading `PlayerImpl.upgradeUnit()`/`costWrapper`), and
+`OilExtractorExecution.produce()` now multiplies the geography-weighted
+base rate by `this.extractor.level()` while `oilExtractorCapacity()`
+stays flat regardless of level — same tank, faster fill, not a bigger
+tank. No level cap exists anywhere in this codebase for any upgradable
+type (upgrades are gated purely by cost, which is itself capped per-type,
+e.g. OilExtractor tops out at 800k gold/upgrade) — OilExtractor doesn't
+introduce one either, consistent with how Port/City already work.
+
+**Bot AI needed no new code at all**, just the config flag. Once
+`unitInfo(type).upgradable` is true, `NationStructureBehavior.
+maybeSpawnStructure()`'s existing generic upgrade-consideration path
+(`getTotalStructureDensity() > threshold && unitInfo(type).upgradable` →
+`maybeUpgradeStructure()`) already applies to any type in `buildOrder` —
+and both Airport and OilExtractor were already added to `buildOrder` in
+the pre-Stage-7 bugfix pass above. So bots now upgrade both exactly the
+same generic way they've always upgraded Port/City/Factory/SAM/Silo, with
+no per-type-special-casing required.
+
+**One real rendering bug found and fixed along the way**:
+`StructureLevelPass.ts` (draws the level-number digits above a leveled
+structure) has its own hardcoded copy of the atlas column order
+(`STRUCTURE_ORDER`), separate from `StructurePass.ts`'s canonical one —
+and its copy was never updated when Airport/OilExtractor were added to
+the real atlas in Phase 1/Stage 6. Looking a type up in
+`typeToAtlasCol` for either of them silently returned `undefined`,
+defaulting (`?? 0`) to atlas column 0 — City's column — so a leveled
+Airport or OilExtractor would have rendered its level digits in the wrong
+place/shape once anyone actually leveled one up. Since Airport has been
+upgradable since Phase 1, this bug already existed; it just had never
+been triggered because nothing before now ever called
+`increaseLevel()` on one. Fixed by adding `UT_AIRPORT`/`UT_OIL_EXTRACTOR`
+to `StructureLevelPass.ts`'s `STRUCTURE_ORDER`, in the same position
+`StructurePass.ts` uses. (Checked `PointLightPass.ts` — its "glow" list
+is a deliberate per-type opt-in, not an atlas-order array, and most
+structure types including DefensePost/SAM/MissileSilo already have no
+glow by design, so Airport/OilExtractor lacking one isn't a bug, just
+unstyled — left alone as a cosmetic non-issue, not a follow-up.)
+
+Verified: `tsc --noEmit` clean, lint clean. Added a test asserting
+`OilExtractor` is upgradable and that going from level 1 to level 4
+quadruples the per-tick fill rate while `oilExtractorCapacity()` stays
+unchanged. Full suite run twice (once after the stacking changes, once
+as the final Stage 7 verification pass): both times only the same
+pre-existing unrelated `InventoryModal.test.ts` flakiness. The
+`NationGoldPerMinute` 20-minute snapshot needed updating **again**
+(bots now also upgrading Airport/OilExtractor pushed shipsArrived
+3209→3473 and tradeGold 614.6M→644.6M — a much smaller jump than the
+pre-Stage-7 pass's, consistent with "existing bot economy plus leveling
+an already-built structure" being a smaller effect than "bots building
+an entirely new structure type for the first time").
+
+Not done, flagged as optional follow-ups rather than blockers: no live
+in-browser confirmation that a leveled Airport/OilExtractor actually
+shows the right level digits on the map (same browser-automation
+limitation as every other stage — the fix was verified by reading
+`StructurePass.ts`'s canonical order and matching it exactly, not by
+screenshot); `oilExtractorValue()` (bot tile-scoring for OilExtractor)
+still only considers land placement, so a bot will never build one on
+water-near-shore the way a human player can — flagged back in the
+pre-Stage-7 pass too, still not done.
+
 ## Known issues (found while testing in-browser, not yet fixed)
 
 - User also saw an IDM ("download mp3") popup while clicking around the
@@ -684,10 +777,22 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **6.5. Pre-Stage-7 bugfix pass** (export timing/spam, water-only Oil
       Ship pathing, bot AI Airport/OilExtractor support) — done, commit
       `2f86174`.
-- [ ] **7. Tests + balance pass + full verification** (~20-30 min) —
-      `npx tsc --noEmit`, `npm run lint`, `npm test`, dev-server sanity
-      check, update this file's "What's actually done".
-- [ ] **8. (optional, low priority, only if asked)** bot AI oil economy.
+- [x] **7. Tests + balance pass + full verification** — done (uncommitted
+      at time of writing). Also folded in the user's "make Airport/
+      OilExtractor stackable (leveling)" request, since it landed right
+      before this stage: `tsc --noEmit` clean, lint clean, full suite
+      green (6156 passed) except the same pre-existing unrelated
+      `InventoryModal.test.ts` flakiness every stage has hit. See the
+      Stage 7 section above for what "stackable" turned into concretely.
+- [x] **8. Bot AI oil economy** — turned out to already be covered:
+      bots building Airport/OilExtractor was fixed in the pre-Stage-7
+      pass (`2f86174`), and bots *upgrading* them (this stage's stacking
+      work) needed no bot-specific code at all — the existing generic
+      upgrade-consideration path in `NationStructureBehavior.
+      maybeSpawnStructure()` already applies to any `upgradable` type in
+      `buildOrder`. Nothing further planned here unless the user asks for
+      something more specific (e.g. tuning how aggressively bots upgrade
+      vs. build new).
 
 Total: roughly 8-10 stages. Given the user is pacing usage deliberately,
 **confirm before starting each stage** rather than chaining them

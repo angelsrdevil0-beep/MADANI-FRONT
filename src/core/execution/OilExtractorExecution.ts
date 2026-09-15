@@ -116,17 +116,24 @@ export class OilExtractorExecution implements Execution {
     port.setOil(port.oil() + cargo);
   }
 
+  // Storage cap is flat regardless of level - leveling up doesn't grow the
+  // tank, it fills the same tank faster (level 5 = 5x the rate, so a full
+  // cycle takes 1/5th the time). Building more separate extractors instead
+  // is the other way to scale up: each has its own tank, so N extractors
+  // give N times the total oil over the same stretch of time. Two distinct
+  // scaling strategies, not the same thing achieved two ways.
   private produce(): void {
     const capacity = this.mg.config().oilExtractorCapacity();
     if (this.extractor.oil() >= capacity) {
       return;
     }
-    const rate = this.mg
+    const baseRate = this.mg
       .config()
       .oilExtractorRate(
         this.mg.x(this.extractor.tile()),
         this.mg.y(this.extractor.tile()),
       );
+    const rate = baseRate * this.extractor.level();
     this.extractor.setOil(Math.min(capacity, this.extractor.oil() + rate));
   }
 

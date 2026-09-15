@@ -693,6 +693,7 @@ export class Config {
           ),
           maxHealth: 500,
           constructionDuration: this.instantBuild() ? 0 : 5 * 10,
+          upgradable: true,
         };
         break;
       case UnitType.OilShip:
