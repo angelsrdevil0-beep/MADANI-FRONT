@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 259 259" role="img" aria-label="Madani Front">
+  <defs>
+    <linearGradient id="mf-mark-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0084d1" />
+      <stop offset="100%" stop-color="#3fa9f5" />
+    </linearGradient>
+  </defs>
+  <text
+    x="50%"
+    y="50%"
+    dominant-baseline="central"
+    text-anchor="middle"
+    font-family="Inter, Arial, sans-serif"
+    font-weight="800"
+    font-size="150"
+    fill="url(#mf-mark-gradient)"
+  >MF</text>
+</svg>

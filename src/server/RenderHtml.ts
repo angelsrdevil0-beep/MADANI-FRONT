@@ -102,11 +102,11 @@ export async function renderHtmlContent(
       cdnBase,
     ),
     desktopLogoImageUrl: buildAssetUrl(
-      "images/OpenFront.png",
+      "images/MadaniFrontLogo.svg",
       assetManifest,
       cdnBase,
     ),
-    mobileLogoImageUrl: buildAssetUrl("images/OF.png", assetManifest, cdnBase),
+    mobileLogoImageUrl: buildAssetUrl("images/MF.svg", assetManifest, cdnBase),
   });
 }
 
