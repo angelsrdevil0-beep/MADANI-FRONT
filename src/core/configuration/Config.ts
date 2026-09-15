@@ -683,6 +683,16 @@ export class Config {
           cost: () => 0n,
         };
         break;
+      case UnitType.OilExtractor:
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(800_000, (numUnits + 1) * 150_000),
+            UnitType.OilExtractor,
+          ),
+          maxHealth: 500,
+          constructionDuration: this.instantBuild() ? 0 : 5 * 10,
+        };
+        break;
       default:
         assertNever(type);
     }
@@ -972,6 +982,23 @@ export class Config {
 
   radiusPortSpawn() {
     return 20;
+  }
+
+  // Max manhattan distance from the player's own shore an OilExtractor may
+  // be placed on water (an offshore rig, not a mid-ocean platform).
+  oilExtractorWaterRange(): number {
+    return 15;
+  }
+
+  // Flat per-tick oil accumulation, before geography weighting (Stage 5).
+  oilExtractorRate(): number {
+    return 2;
+  }
+
+  // Storage cap per extractor — production stops once full until it's
+  // exported (Stage 3's Oil Ship / Stage 4's rail).
+  oilExtractorCapacity(): number {
+    return 5_000;
   }
 
   tradeShipShortRangeDebuff(): number {

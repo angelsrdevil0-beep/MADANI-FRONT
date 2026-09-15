@@ -7,6 +7,7 @@ import { FactoryExecution } from "./FactoryExecution";
 import { MirvExecution } from "./MIRVExecution";
 import { MissileSiloExecution } from "./MissileSiloExecution";
 import { NukeExecution } from "./NukeExecution";
+import { OilExtractorExecution } from "./OilExtractorExecution";
 import { PortExecution } from "./PortExecution";
 import { SAMLauncherExecution } from "./SAMLauncherExecution";
 import { WarshipExecution } from "./WarshipExecution";
@@ -154,6 +155,9 @@ export class ConstructionExecution implements Execution {
       case UnitType.Airport:
         this.mg.addExecution(new AirportExecution(this.structure!));
         break;
+      case UnitType.OilExtractor:
+        this.mg.addExecution(new OilExtractorExecution(this.structure!));
+        break;
       default:
         console.warn(
           `unit type ${this.constructionType} cannot be constructed`,
@@ -171,6 +175,7 @@ export class ConstructionExecution implements Execution {
       case UnitType.City:
       case UnitType.Factory:
       case UnitType.Airport:
+      case UnitType.OilExtractor:
         return true;
       default:
         return false;

@@ -38,6 +38,7 @@ export class UnitImpl implements Unit {
   private _underConstruction: boolean = false;
   private _lastOwner: PlayerImpl | null = null;
   private _troops: number;
+  private _oil: number = 0;
   // Number of missiles in cooldown, if empty all missiles are ready.
   private _missileTimerQueue: number[] = [];
   private _hasTrainStation: boolean = false;
@@ -149,6 +150,7 @@ export class UnitImpl implements Unit {
       unitType: this._type,
       id: this._id,
       troops: this._troops,
+      oil: this._oil,
       ownerID: this._owner.smallID(),
       lastOwnerID: this._lastOwner?.smallID(),
       isActive: this._active,
@@ -211,6 +213,17 @@ export class UnitImpl implements Unit {
   }
   troops(): number {
     return this._troops;
+  }
+  setOil(oil: number): void {
+    const nextOil = Math.max(0, oil);
+    if (this._oil === nextOil) {
+      return;
+    }
+    this._oil = nextOil;
+    this.mg.addUpdate(this.toUpdate());
+  }
+  oil(): number {
+    return this._oil;
   }
   health(): number {
     return Number(this._health);

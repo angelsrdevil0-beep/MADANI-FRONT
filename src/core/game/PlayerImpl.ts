@@ -1596,6 +1596,8 @@ export class PlayerImpl implements Player {
         return this.landBasedStructureSpawn(targetTile, validTiles);
       case UnitType.CommercialAircraft:
         return this.airportTradeSpawn(targetTile);
+      case UnitType.OilExtractor:
+        return this.oilExtractorSpawn(targetTile, validTiles);
       default:
         assertNever(unitType);
     }
@@ -1674,6 +1676,29 @@ export class PlayerImpl implements Player {
       }
     }
     return false;
+  }
+
+  // Land: same as any other land structure. Water: allowed, but only within
+  // a short range of the player's own shore (an oil rig off the coast, not
+  // in open ocean) — mirrors portSpawn's BFS-to-owned-shore search, but
+  // validates the clicked water tile itself rather than snapping onto land.
+  oilExtractorSpawn(
+    tile: TileRef,
+    validTiles: TileRef[] | null,
+  ): TileRef | false {
+    if (this.mg.isLand(tile)) {
+      return this.landBasedStructureSpawn(tile, validTiles);
+    }
+    if (!this.mg.isWater(tile)) {
+      return false;
+    }
+    const nearOwnedShore = Array.from(
+      this.mg.bfs(
+        tile,
+        manhattanDistFN(tile, this.mg.config().oilExtractorWaterRange()),
+      ),
+    ).some((t) => this.mg.isShore(t) && this.mg.owner(t) === this);
+    return nearOwnedShore ? tile : false;
   }
 
   warshipSpawn(tile: TileRef): TileRef | false {

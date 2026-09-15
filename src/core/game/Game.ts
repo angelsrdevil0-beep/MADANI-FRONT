@@ -210,6 +210,7 @@ export enum UnitType {
   Factory = "Factory",
   Airport = "Airport",
   CommercialAircraft = "Commercial Aircraft",
+  OilExtractor = "Oil Extractor",
 }
 
 export enum TrainType {
@@ -240,6 +241,7 @@ export const Structures = unitTypeGroup([
   UnitType.Port,
   UnitType.Factory,
   UnitType.Airport,
+  UnitType.OilExtractor,
 ] as const);
 
 export const BuildMenus = unitTypeGroup([
@@ -326,6 +328,8 @@ export interface UnitParamsMap {
   [UnitType.CommercialAircraft]: {
     targetUnit: Unit;
   };
+
+  [UnitType.OilExtractor]: Record<string, never>;
 }
 
 // Type helper to get params type for a specific unit type
@@ -549,6 +553,10 @@ export interface Unit {
   // Troops
   setTroops(troops: number): void;
   troops(): number;
+
+  // Oil (stored at oil-producing structures, e.g. OilExtractor)
+  setOil(oil: number): void;
+  oil(): number;
 
   // --- UNIT SPECIFIC ---
 

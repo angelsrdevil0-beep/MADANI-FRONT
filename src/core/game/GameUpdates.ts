@@ -180,6 +180,7 @@ export interface UnitUpdate {
   type: GameUpdateType.Unit;
   unitType: UnitType;
   troops: number;
+  oil?: number; // Only for oil-producing structures
   id: number;
   ownerID: number;
   lastOwnerID?: number;

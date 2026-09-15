@@ -65,6 +65,42 @@ eslint's default-project file-count cap (8) over the limit. Both atlas
 targets were verified byte-identical to their prior separately-generated
 output before committing.
 
+**Stage 2 — Oil core data model + Oil Extractor (commit pending)**: new
+`UnitType.OilExtractor`, a land/near-shore structure mirroring Port's
+shore-adjacency idiom but generalized. Core additions:
+
+- Generic `oil()`/`setOil()` on `Unit` (mirrors `troops()`/`setTroops()`) —
+  a genuinely new per-unit numeric resource, plumbed through `UnitImpl.ts`
+  and `GameUpdates.ts`'s `UnitUpdate` (worker→main-thread only, no Zod
+  schema needed — that layer isn't networked).
+- Placement (`PlayerImpl.oilExtractorSpawn()`): plain owned land reuses
+  `landBasedStructureSpawn`; water is allowed only within
+  `Config.oilExtractorWaterRange()` (15 tiles) of the player's **own**
+  shore — a BFS-radius check mirroring `portSpawn`'s, but validating the
+  clicked water tile itself instead of snapping onto land.
+- `OilExtractorExecution.ts` (new file): each tick, fills `oil` toward
+  `Config.oilExtractorCapacity()` (5,000) at `Config.oilExtractorRate()`
+  (2/tick flat — no geography weighting yet, that's Stage 5), then stops.
+  Wired into `ConstructionExecution.ts` alongside Port/Airport/etc.
+- `Config.unitInfo()` entry: cost curve mirrors DefensePost's shape (not
+  upgradable — capacity scales by building more extractors, per the
+  user's spec, not by leveling one up).
+- `tests/OilExtractor.test.ts`: land placement, water-near-own-shore
+  placement (allowed), water-far-from-shore placement (rejected, via a
+  zero-range config override rather than hunting for map-specific
+  coordinates), and end-to-end oil accumulation via the real
+  `ConstructionExecution` path, asserting it caps at capacity.
+
+No client wiring yet (icon/build-menu/i18n/sprite/storage-bar UI) — that's
+Stage 6, deliberately kept separate. Not yet exported/tradeable — that's
+Stage 3 (Oil Ship) and Stage 4 (domestic rail).
+
+Verified: `npx tsc --noEmit` clean, `npm run lint` clean, new tests pass,
+full suite has the same 6 pre-existing unrelated client-test failures
+(`CosmeticsPaymentsMigration.test.ts`, `InventoryModal.test.ts` — jsdom
+navigation/timeout flakiness) confirmed present on baseline via
+`git stash` before these changes existed.
+
 ## What got explicitly descoped
 
 The original plan (see the plan file above) called for a 3-tier fighter-jet
@@ -205,12 +241,8 @@ rough effort sizing, not wall-clock guarantees.
 
 - [x] **0. Cleanup** — done, commit `c54168c`.
 - [x] **1. Render Commercial Aircraft** — done, commit `86b04cc`.
-- [ ] **2. Oil core data model + Oil Extractor** (~45-60 min) — new
-      `UnitType.OilExtractor`, the storage-cap mechanic (new to this
-      codebase — a resource that fills and blocks production at capacity),
-      placement rule (land, or water within a short range of shore —
-      generalizes Port's shore-adjacency), flat-rate extraction to start
-      (no geography yet).
+- [x] **2. Oil core data model + Oil Extractor** — done, see "What's
+      actually done" below for commit hash once committed.
 - [ ] **3. Oil Ship + export economy** (~45-60 min) — new
       `UnitType.OilShip`, auto-spawned, smaller capacity than Commercial
       Aircraft, drains the source extractor's storage per trip, pays gold
