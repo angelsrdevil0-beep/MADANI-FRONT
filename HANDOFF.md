@@ -15,6 +15,8 @@ something material changes — don't let it go stale.
   - `c54168c` — Stage 0: removed the descoped fighter-jet/carrier scaffolding
   - `a92a279` — HANDOFF.md update
   - `86b04cc` — Stage 1: Commercial Aircraft now renders on the map
+  - `dbc2d49` — HANDOFF.md update
+  - `d355f5e` — Stage 2: Oil Extractor core data model
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -65,7 +67,7 @@ eslint's default-project file-count cap (8) over the limit. Both atlas
 targets were verified byte-identical to their prior separately-generated
 output before committing.
 
-**Stage 2 — Oil core data model + Oil Extractor (commit pending)**: new
+**Stage 2 — Oil core data model + Oil Extractor (commit `d355f5e`)**: new
 `UnitType.OilExtractor`, a land/near-shore structure mirroring Port's
 shore-adjacency idiom but generalized. Core additions:
 
@@ -241,8 +243,7 @@ rough effort sizing, not wall-clock guarantees.
 
 - [x] **0. Cleanup** — done, commit `c54168c`.
 - [x] **1. Render Commercial Aircraft** — done, commit `86b04cc`.
-- [x] **2. Oil core data model + Oil Extractor** — done, see "What's
-      actually done" below for commit hash once committed.
+- [x] **2. Oil core data model + Oil Extractor** — done, commit `d355f5e`.
 - [ ] **3. Oil Ship + export economy** (~45-60 min) — new
       `UnitType.OilShip`, auto-spawned, smaller capacity than Commercial
       Aircraft, drains the source extractor's storage per trip, pays gold
