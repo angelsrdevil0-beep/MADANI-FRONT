@@ -1598,6 +1598,8 @@ export class PlayerImpl implements Player {
         return this.airportTradeSpawn(targetTile);
       case UnitType.OilExtractor:
         return this.oilExtractorSpawn(targetTile, validTiles);
+      case UnitType.OilShip:
+        return this.oilShipSpawn(targetTile);
       default:
         assertNever(unitType);
     }
@@ -1816,6 +1818,14 @@ export class PlayerImpl implements Player {
 
   airportTradeSpawn(targetTile: TileRef): TileRef | false {
     return this.units(UnitType.Airport).find((u) => u.tile() === targetTile)
+      ? targetTile
+      : false;
+  }
+
+  oilShipSpawn(targetTile: TileRef): TileRef | false {
+    return this.units(UnitType.OilExtractor).find(
+      (u) => u.tile() === targetTile,
+    )
       ? targetTile
       : false;
   }

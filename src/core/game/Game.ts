@@ -211,6 +211,7 @@ export enum UnitType {
   Airport = "Airport",
   CommercialAircraft = "Commercial Aircraft",
   OilExtractor = "Oil Extractor",
+  OilShip = "Oil Ship",
 }
 
 export enum TrainType {
@@ -330,6 +331,10 @@ export interface UnitParamsMap {
   };
 
   [UnitType.OilExtractor]: Record<string, never>;
+
+  [UnitType.OilShip]: {
+    targetUnit: Unit;
+  };
 }
 
 // Type helper to get params type for a specific unit type

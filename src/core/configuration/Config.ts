@@ -693,6 +693,11 @@ export class Config {
           constructionDuration: this.instantBuild() ? 0 : 5 * 10,
         };
         break;
+      case UnitType.OilShip:
+        info = {
+          cost: () => 0n,
+        };
+        break;
       default:
         assertNever(type);
     }
@@ -996,9 +1001,22 @@ export class Config {
   }
 
   // Storage cap per extractor — production stops once full until it's
-  // exported (Stage 3's Oil Ship / Stage 4's rail).
+  // exported (Oil Ship / domestic rail).
   oilExtractorCapacity(): number {
     return 5_000;
+  }
+
+  // Smaller than the extractor's own storage, per spec - a ship carries one
+  // load, not the whole reserve, so a full tank still takes multiple trips.
+  oilShipCapacity(): number {
+    return 1_000;
+  }
+
+  // Gold paid to EACH side (source and destination) per delivered oil
+  // shipment - mirrors tradeShipGold() paying both ends identically.
+  // Placeholder flat rate; real balance pass is a later stage.
+  oilShipGold(cargo: number, player: Player | PlayerView): Gold {
+    return BigInt(Math.floor(cargo * 40 * this.goldMultiplierFor(player)));
   }
 
   tradeShipShortRangeDebuff(): number {
