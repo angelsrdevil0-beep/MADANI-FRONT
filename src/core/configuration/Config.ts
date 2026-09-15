@@ -1040,9 +1040,31 @@ export class Config {
 
   // Gold paid to EACH side (source and destination) per delivered oil
   // shipment - mirrors tradeShipGold() paying both ends identically.
-  // Placeholder flat rate; real balance pass is a later stage.
-  oilShipGold(cargo: number, player: Player | PlayerView): Gold {
-    return BigInt(Math.floor(cargo * 40 * this.goldMultiplierFor(player)));
+  // First balance pass: was a flat cargo*40 rate with no distance term at
+  // all, unlike every other trade mechanic in this game (tradeShipGold's
+  // sigmoid explicitly rewards long hauls and punishes short ones via
+  // tradeShipShortRangeDebuff) - so two OilExtractors built right next to
+  // each other paid exactly as well as a genuine cross-map trade route,
+  // with zero of the distance/risk tradeoff Trade Ship already has. Now
+  // scales with `tiles` (the ship's actual traveled distance) too: a
+  // simple linear multiplier from 0.5x (very short hop) to 1.5x (a long
+  // haul, at least 1.5x tradeShipShortRangeDebuff), pivoting at 1x around
+  // that debuff distance - reusing the same reference distance
+  // tradeShipGold treats as "short," rather than inventing an
+  // oil-specific one. A deliberately simpler curve than tradeShipGold's
+  // sigmoid (linear, not S-shaped) - this is still a first pass, revisit
+  // after real multiplayer play.
+  oilShipGold(cargo: number, tiles: number, player: Player | PlayerView): Gold {
+    const debuff = this.tradeShipShortRangeDebuff();
+    // A zeroed-out debuff (some tests disable it entirely) would otherwise
+    // divide by zero - fall back to a neutral multiplier rather than NaN gold.
+    const distanceMultiplier =
+      debuff > 0 ? within(tiles / debuff, 0.5, 1.5) : 1;
+    return BigInt(
+      Math.floor(
+        cargo * 40 * distanceMultiplier * this.goldMultiplierFor(player),
+      ),
+    );
   }
 
   // How often (in ticks) a Port or a water-adjacent OilExtractor checks

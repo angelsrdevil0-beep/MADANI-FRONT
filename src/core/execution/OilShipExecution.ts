@@ -17,6 +17,10 @@ import { PathStatus } from "../pathfinding/types";
 // Cargo is deducted from the source at spawn time (not refunded if the trip
 // fails) and carried on the ship's own oil() field, so its size is whatever
 // the source had on hand, capped at cargoCapacity - not always a full load.
+// Distance actually traveled (tilesTraveled, mirroring TradeShipExecution's
+// own counter) feeds Config.oilShipGold()'s payout, same as a trade ship's
+// gold scales with distance - a same-tile "trip" (0 tiles) never increments
+// it, since the destination check runs before the first move.
 export class OilShipExecution implements Execution {
   private active = true;
   private mg: Game;
@@ -24,6 +28,7 @@ export class OilShipExecution implements Execution {
   private pathFinder: WaterPathFinder;
   private motionPlanId = 1;
   private motionPlanDst: TileRef | null = null;
+  private tilesTraveled = 0;
 
   private static _staggerCounter = 0;
 
@@ -117,6 +122,7 @@ export class OilShipExecution implements Execution {
           this.motionPlanDst = dstTile;
         }
         this.ship.move(result.node);
+        this.tilesTraveled++;
         break;
       }
       case PathStatus.COMPLETE:
@@ -138,7 +144,9 @@ export class OilShipExecution implements Execution {
     this.active = false;
     const cargo = this.ship!.oil();
     this.ship!.delete(false);
-    const gold = this.mg.config().oilShipGold(cargo, this.src.owner());
+    const gold = this.mg
+      .config()
+      .oilShipGold(cargo, this.tilesTraveled, this.src.owner());
 
     this.src.owner().addGold(gold, this.src.tile());
     this.dst.owner().addGold(gold, this.dst.tile());

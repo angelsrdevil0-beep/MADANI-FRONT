@@ -182,4 +182,26 @@ describe("OilShip", () => {
       expect(game.isWater(t)).toBe(true);
     }
   });
+
+  test("oilShipGold pays more for a longer trip than a shorter one, cargo and debuff held equal", () => {
+    // Real tradeShipShortRangeDebuff() (this file's beforeEach zeroes it,
+    // which is the "no distance signal" fallback case, not what's under
+    // test here).
+    game.config().tradeShipShortRangeDebuff = () => 300;
+    const cargo = 1000;
+    const short = game.config().oilShipGold(cargo, 50, player);
+    const mid = game.config().oilShipGold(cargo, 300, player);
+    const long = game.config().oilShipGold(cargo, 600, player);
+    expect(short).toBeLessThan(mid);
+    expect(mid).toBeLessThan(long);
+    // Clamped at 0.5x / 1.5x of the flat cargo*40 base rate.
+    expect(short).toBe(BigInt(cargo * 40 * 0.5));
+    expect(long).toBe(BigInt(cargo * 40 * 1.5));
+  });
+
+  test("oilShipGold falls back to a neutral multiplier when the debuff is zeroed, instead of NaN", () => {
+    game.config().tradeShipShortRangeDebuff = () => 0;
+    const gold = game.config().oilShipGold(1000, 50, player);
+    expect(gold).toBe(BigInt(1000 * 40));
+  });
 });
