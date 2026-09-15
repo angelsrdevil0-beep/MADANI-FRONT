@@ -121,7 +121,10 @@ export class ServerEnv {
     return ServerEnv.workerPortByIndex(ServerEnv.workerIndex(gameID));
   }
   static workerPortByIndex(index: number): number {
-    return 3001 + index;
+    const base = process.env.WORKER_BASE_PORT
+      ? Number(process.env.WORKER_BASE_PORT)
+      : 3001;
+    return base + index;
   }
   // Mint a game id under this deployment's instance letter.
   static generateGameId(): GameID {

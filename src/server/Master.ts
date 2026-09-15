@@ -3,6 +3,7 @@ import crypto from "crypto";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import http from "http";
+import net from "net";
 import path from "path";
 import { fileURLToPath } from "url";
 import { GameEnv } from "../core/configuration/Config";
@@ -33,6 +34,95 @@ const log = logger.child({ comp: "m" });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// --- Standalone-deployment worker proxy ---
+// In the real production fleet, nginx routes /wN paths straight to each
+// worker's own exposed host, and it randomly distributes bare
+// /api/create_game-style calls across workers before the request ever
+// reaches this process (docs/MultiServer.md) - Master never sees any of
+// this traffic there. A standalone deployment (one container, one exposed
+// port, no external load balancer - e.g. a single free-tier PaaS service)
+// has no such layer in front of it, so without this, a single-service host
+// could only ever serve the homepage: every actual game connection has
+// nowhere to go. Always-on is safe: nginx already intercepts these paths
+// upstream of Master in the fleet setup, so this simply never fires there.
+const WORKER_PREFIX_RE = /^\/w(\d+)(\/.*)?$/;
+const RANDOM_WORKER_API_PATHS = new Set([
+  "/api/create_game",
+  "/api/adminbot/create_game",
+]);
+
+function pickWorkerIndexForPath(pathname: string): number | null {
+  const prefixMatch = WORKER_PREFIX_RE.exec(pathname);
+  if (prefixMatch) {
+    const idx = Number(prefixMatch[1]);
+    return idx < ServerEnv.numWorkers() ? idx : null;
+  }
+  if (RANDOM_WORKER_API_PATHS.has(pathname)) {
+    return Math.floor(Math.random() * ServerEnv.numWorkers());
+  }
+  return null;
+}
+
+// Must run before express.json() below - that middleware consumes the
+// request body stream, which would leave nothing left to forward here.
+app.use((req, res, next) => {
+  const pathname = req.path;
+  const workerIndex = pickWorkerIndexForPath(pathname);
+  if (workerIndex === null) {
+    next();
+    return;
+  }
+  const targetPort = ServerEnv.workerPortByIndex(workerIndex);
+  const proxyReq = http.request(
+    {
+      host: "127.0.0.1",
+      port: targetPort,
+      path: req.originalUrl,
+      method: req.method,
+      headers: req.headers,
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+      proxyRes.pipe(res);
+    },
+  );
+  proxyReq.on("error", (err) => {
+    log.error(`worker proxy error for ${pathname}: ${err}`);
+    if (!res.headersSent) res.status(502).end("Worker unavailable");
+  });
+  req.pipe(proxyReq);
+});
+
+// The WS counterpart of the HTTP proxy above: splices the raw sockets
+// together after replaying the original upgrade request line/headers to the
+// worker, so the worker's own WebSocketServer({ noServer: true }) completes
+// the handshake exactly as if the client had connected to it directly.
+server.on("upgrade", (req, socket, head) => {
+  const pathname = (req.url ?? "").split("?")[0];
+  const workerIndex = pickWorkerIndexForPath(pathname);
+  if (workerIndex === null) {
+    socket.destroy();
+    return;
+  }
+  const targetPort = ServerEnv.workerPortByIndex(workerIndex);
+  const targetSocket = net.connect(targetPort, "127.0.0.1", () => {
+    let requestLine = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
+    for (let i = 0; i < req.rawHeaders.length; i += 2) {
+      requestLine += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
+    }
+    requestLine += "\r\n";
+    targetSocket.write(requestLine);
+    if (head && head.length > 0) targetSocket.write(head);
+    targetSocket.pipe(socket);
+    socket.pipe(targetSocket);
+  });
+  targetSocket.on("error", (err) => {
+    log.error(`worker WS proxy error for ${pathname}: ${err}`);
+    socket.destroy();
+  });
+  socket.on("error", () => targetSocket.destroy());
+});
 
 app.use(express.json());
 
@@ -206,7 +296,10 @@ export async function startMaster() {
     );
   });
 
-  const PORT = 3000;
+  // Most free PaaS hosts (Render, Railway, etc.) assign the external port at
+  // runtime via $PORT and route to whatever the app actually binds - falls
+  // back to 3000 (unchanged local/dev behavior) when it's not set.
+  const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
   server.listen(PORT, () => {
     log.info(`Master HTTP server listening on port ${PORT}`);
   });
