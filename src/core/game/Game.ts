@@ -209,12 +209,7 @@ export enum UnitType {
   Train = "Train",
   Factory = "Factory",
   Airport = "Airport",
-  AircraftCarrier = "Aircraft Carrier",
   CommercialAircraft = "Commercial Aircraft",
-  AirFighter = "Air Fighter",
-  StealthFighter = "Stealth Fighter",
-  GroundAttacker = "Ground Attacker",
-  AirMissile = "Air Missile",
 }
 
 export enum TrainType {
@@ -235,10 +230,6 @@ export const BuildableAttacks = unitTypeGroup([
   UnitType.HydrogenBomb,
   UnitType.MIRV,
   UnitType.Warship,
-  UnitType.AircraftCarrier,
-  UnitType.AirFighter,
-  UnitType.StealthFighter,
-  UnitType.GroundAttacker,
 ] as const);
 
 export const Structures = unitTypeGroup([
@@ -249,26 +240,6 @@ export const Structures = unitTypeGroup([
   UnitType.Port,
   UnitType.Factory,
   UnitType.Airport,
-] as const);
-
-// Fighter-jet types that patrol/intercept in the air, sharing one
-// AirUnitState machine (see AirUnitExecution). AircraftCarrier is
-// deliberately excluded here — it reuses WarshipState/WarshipExecution
-// instead, since it behaves like a ship, not a plane.
-export const AirCombatUnits = unitTypeGroup([
-  UnitType.AirFighter,
-  UnitType.StealthFighter,
-  UnitType.GroundAttacker,
-] as const);
-
-// Every unit type with a "click a tile to set/move its patrol area" UX
-// (client-side selection controllers key off this).
-export const PatrolUnits = unitTypeGroup([
-  UnitType.Warship,
-  UnitType.AircraftCarrier,
-  UnitType.AirFighter,
-  UnitType.StealthFighter,
-  UnitType.GroundAttacker,
 ] as const);
 
 export const BuildMenus = unitTypeGroup([
@@ -352,27 +323,7 @@ export interface UnitParamsMap {
 
   [UnitType.Airport]: Record<string, never>;
 
-  [UnitType.AircraftCarrier]: {
-    patrolTile: TileRef;
-  };
-
   [UnitType.CommercialAircraft]: {
-    targetUnit: Unit;
-  };
-
-  [UnitType.AirFighter]: {
-    patrolTile: TileRef;
-  };
-
-  [UnitType.StealthFighter]: {
-    patrolTile: TileRef;
-  };
-
-  [UnitType.GroundAttacker]: {
-    patrolTile: TileRef;
-  };
-
-  [UnitType.AirMissile]: {
     targetUnit: Unit;
   };
 }

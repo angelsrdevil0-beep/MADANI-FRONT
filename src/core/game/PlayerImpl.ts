@@ -1596,15 +1596,6 @@ export class PlayerImpl implements Player {
         return this.landBasedStructureSpawn(targetTile, validTiles);
       case UnitType.CommercialAircraft:
         return this.airportTradeSpawn(targetTile);
-      case UnitType.AirMissile:
-        return targetTile;
-      // Not yet buildable — Aircraft Carrier, Air Fighter, Stealth Fighter,
-      // and Ground Attacker land in a later phase (carrierSpawn/airUnitSpawn).
-      case UnitType.AircraftCarrier:
-      case UnitType.AirFighter:
-      case UnitType.StealthFighter:
-      case UnitType.GroundAttacker:
-        return false;
       default:
         assertNever(unitType);
     }
