@@ -1,9 +1,15 @@
 import { vi } from "vitest";
 import { ConstructionExecution } from "../src/core/execution/ConstructionExecution";
 import { NationStructureBehavior } from "../src/core/execution/nation/NationStructureBehavior";
-import { Difficulty, PlayerType, UnitType } from "../src/core/game/Game";
+import {
+  Difficulty,
+  PlayerInfo,
+  PlayerType,
+  UnitType,
+} from "../src/core/game/Game";
 import { Cluster } from "../src/core/game/TrainStation";
 import { PseudoRandom } from "../src/core/PseudoRandom";
+import { setup } from "./util/Setup";
 
 // ── Fixed trade-gold values matching DefaultConfig ──────────────────────────
 
@@ -1052,5 +1058,60 @@ describe("NationStructureBehavior — Airport/OilExtractor bot support", () => {
     expect(
       (behavior as any).shouldBuildStructure(UnitType.OilExtractor, 10, true),
     ).toBe(true);
+  });
+});
+
+// ── randOilExtractorWaterTileArray — bot water-near-shore placement ─────────
+// Regression coverage for bots never considering the water-near-own-shore
+// placement option a human player has for OilExtractor (structureSpawnTile()
+// only ever sampled land tiles). Uses the real simulation (bfs/isShore/
+// isWater need real geography), not hand-mocks, per this project's testing
+// convention for anything geography-dependent.
+
+describe("NationStructureBehavior.randOilExtractorWaterTileArray", () => {
+  it("returns water tiles within oilExtractorWaterRange() of the player's own shore", async () => {
+    const game = await setup(
+      "half_land_half_ocean",
+      { instantBuild: true },
+      [new PlayerInfo("player", PlayerType.Human, null, "player_id")],
+    );
+    const player = game.player("player_id");
+    player.addGold(BigInt(1_000_000));
+    const shoreTile = game.ref(7, 10);
+    expect(game.isShore(shoreTile)).toBe(true);
+    player.conquer(shoreTile);
+
+    const behavior = new NationStructureBehavior(
+      new PseudoRandom(0),
+      game,
+      player,
+    );
+    const waterTiles: number[] = (behavior as any).randOilExtractorWaterTileArray(25);
+
+    expect(waterTiles.length).toBeGreaterThan(0);
+    const range = game.config().oilExtractorWaterRange();
+    for (const t of waterTiles) {
+      expect(game.isWater(t)).toBe(true);
+      expect(player.canBuild(UnitType.OilExtractor, t)).not.toBe(false);
+      expect(game.manhattanDist(t, shoreTile)).toBeLessThanOrEqual(range * 2);
+    }
+  });
+
+  it("returns an empty array for a landlocked player (no shore tiles)", () => {
+    const game: any = {
+      config: () => ({}),
+    };
+    const player: any = {
+      borderTiles: () => [1, 2, 3],
+    };
+    game.isShore = () => false;
+    const behavior = new NationStructureBehavior(
+      new PseudoRandom(0),
+      game,
+      player,
+    );
+    expect(
+      (behavior as any).randOilExtractorWaterTileArray(25),
+    ).toEqual([]);
   });
 });

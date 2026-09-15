@@ -10,7 +10,7 @@ import {
   Unit,
   UnitType,
 } from "../../game/Game";
-import { TileRef } from "../../game/GameMap";
+import { manhattanDistFN, TileRef } from "../../game/GameMap";
 import { Cluster } from "../../game/TrainStation";
 import { PseudoRandom } from "../../PseudoRandom";
 import { assertNever } from "../../Util";
@@ -847,7 +847,12 @@ export class NationStructureBehavior {
     const tiles =
       type === UnitType.Port
         ? this.randCoastalTileArray(25)
-        : randTerritoryTileArray(this.random, this.game, this.player, 25);
+        : type === UnitType.OilExtractor
+          ? [
+              ...randTerritoryTileArray(this.random, this.game, this.player, 25),
+              ...this.randOilExtractorWaterTileArray(25),
+            ]
+          : randTerritoryTileArray(this.random, this.game, this.player, 25);
     if (tiles.length === 0) return null;
     const valueFunction = this.structureSpawnTileValue(type);
     if (valueFunction === null) return null;
@@ -888,6 +893,31 @@ export class NationStructureBehavior {
       return false;
     });
     return Array.from(this.arraySampler(tiles, numTiles));
+  }
+
+  /**
+   * Samples water tiles within Config.oilExtractorWaterRange() of the
+   * player's own shore - the water-placement option PlayerImpl.
+   * oilExtractorSpawn() allows a human to use but which bots never
+   * considered (structureSpawnTile() only ever fed them land tiles). BFS
+   * from a handful of shore-tile seeds rather than every shore tile, since
+   * a large nation's full border can be thousands of tiles.
+   */
+  private randOilExtractorWaterTileArray(numTiles: number): TileRef[] {
+    const shoreTiles = Array.from(this.player.borderTiles()).filter((t) =>
+      this.game.isShore(t),
+    );
+    if (shoreTiles.length === 0) return [];
+
+    const range = this.game.config().oilExtractorWaterRange();
+    const seeds = this.arraySampler(shoreTiles, Math.min(shoreTiles.length, 5));
+    const candidates = new Set<TileRef>();
+    for (const seed of seeds) {
+      for (const t of this.game.bfs(seed, manhattanDistFN(seed, range))) {
+        if (this.game.isWater(t)) candidates.add(t);
+      }
+    }
+    return Array.from(this.arraySampler(Array.from(candidates), numTiles));
   }
 
   private *arraySampler<T>(a: T[], sampleSize: number): Generator<T> {
