@@ -33,6 +33,7 @@ const factoryIcon = assetUrl("images/FactoryIconWhite.svg");
 const goldCoinIcon = assetUrl("images/GoldCoinIcon.svg");
 const mirvIcon = assetUrl("images/MIRVIcon.svg");
 const missileSiloIcon = assetUrl("images/MissileSiloIconWhite.svg");
+const oilExtractorIcon = assetUrl("images/OilExtractorIconWhite.svg");
 const hydrogenBombIcon = assetUrl("images/MushroomCloudIconWhite.svg");
 const atomBombIcon = assetUrl("images/NukeIconWhite.svg");
 const portIcon = assetUrl("images/PortIcon.svg");
@@ -124,6 +125,13 @@ export const buildTable: BuildItemDisplay[][] = [
       icon: airportIcon,
       description: "build_menu.desc.airport",
       key: "unit_type.airport",
+      countable: true,
+    },
+    {
+      unitType: UnitType.OilExtractor,
+      icon: oilExtractorIcon,
+      description: "build_menu.desc.oil_extractor",
+      key: "unit_type.oil_extractor",
       countable: true,
     },
   ],

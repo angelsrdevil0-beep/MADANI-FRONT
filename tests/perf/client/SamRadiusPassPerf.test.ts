@@ -139,6 +139,7 @@ function createMockSAMStructures(
       targetUnitId: null,
       targetTile: null,
       troops: 0,
+      oil: 0,
       missileTimerQueue: [],
       level,
       veterancy: 0,

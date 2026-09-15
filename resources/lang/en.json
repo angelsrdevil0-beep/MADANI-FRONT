@@ -164,6 +164,7 @@
       "hydrogen_bomb": "Large explosion",
       "mirv": "Huge explosion, only targets selected player",
       "missile_silo": "Used to launch nukes",
+      "oil_extractor": "Extracts oil, exported by Oil Ship or domestic rail for gold",
       "port": "Sends trade ships to generate gold",
       "sam_launcher": "Defends against incoming nukes",
       "warship": "Captures trade ships, destroys ships and boats"
@@ -2037,6 +2038,7 @@
     "hydrogen_bomb": "Hydrogen Bomb",
     "mirv": "MIRV",
     "missile_silo": "Missile Silo",
+    "oil_extractor": "Oil Extractor",
     "port": "Port",
     "sam_launcher": "SAM Launcher",
     "warship": "Warship"
@@ -2108,6 +2110,8 @@
     "build_mirv_desc": "Build a MIRV under your cursor.",
     "build_missile_silo": "Build Missile Silo",
     "build_missile_silo_desc": "Build a Missile Silo under your cursor.",
+    "build_oil_extractor": "Build Oil Extractor",
+    "build_oil_extractor_desc": "Build an Oil Extractor under your cursor.",
     "build_port": "Build Port",
     "build_port_desc": "Build a Port under your cursor.",
     "build_sam_launcher": "Build SAM Launcher",

@@ -273,50 +273,52 @@ function extendAtlas(fileName, colWidth, draw) {
   );
 }
 
-// Draws the Airport icon (control tower) into the new column, scaled from
-// the 0..100 viewBox of resources/images/AirportIconWhite.svg to 64x64.
-// Used by StructurePass's icon-atlas.png (64x64 cells, plain white icons).
-function drawAirportIcon(image, tools) {
+// Prior columns (Airport icon, Commercial Aircraft sprite) were added the
+// same way this tool adds new ones — see git history for their draw
+// functions if another column needs the same treatment before the real
+// generate-sprite-atlases.mjs generator is recovered.
+
+// Draws an oil-derrick silhouette (tapered tower on a base platform, two
+// cross braces, a beacon) into the new column. Used by StructurePass's
+// icon-atlas.png for the Oil Extractor structure.
+function drawOilExtractorIcon(image, tools) {
   const { fillRect, fillCircle, fillQuad } = tools;
   const colBase = image.colBase;
   const scale = 64 / 100;
   const at = (x, y) => [colBase + x * scale, y * scale];
-  fillRect(...at(10, 88), ...at(90, 94)); // runway
-  fillQuad([at(46, 90), at(40, 46), at(60, 46), at(54, 90)]); // tower shaft
-  fillRect(...at(32, 30), ...at(68, 48)); // cabin
-  fillRect(...at(48, 10), ...at(52, 30)); // mast
+  fillRect(...at(10, 84), ...at(90, 92)); // base platform
+  fillQuad([at(46, 10), at(54, 10), at(66, 84), at(34, 84)]); // derrick tower
+  fillRect(...at(28, 46), ...at(72, 52)); // upper brace
+  fillRect(...at(33, 66), ...at(67, 72)); // lower brace
   const [bx, by] = at(50, 8);
   fillCircle(bx, by, 5 * scale); // beacon
 }
 
-// Draws a small top-down airplane silhouette into the new column, for
-// Commercial Aircraft. Used by UnitPass's unit-atlas.png (13x13 cells,
-// grayscale-only sprites — see the module doc comment above).
-function drawCommercialAircraft(image, tools) {
+// Draws a small top-down ship silhouette (hull + midship tank) into the new
+// column, for Oil Ship. Used by UnitPass's unit-atlas.png. Renders in the
+// ground/sea bucket (like Trade Ship), not the missile bucket — see
+// UnitPass.ts's doc comment.
+function drawOilShip(image, tools) {
   const { setGray } = tools;
   const colBase = image.colBase;
   const LIGHT = 180;
   const DARK = 70;
-  // Fuselage (nose to tail), centered at local x=6, skipping the wing rows.
-  for (const y of [3, 4, 6, 7, 9]) {
-    setGray(colBase + 6, y, LIGHT);
-  }
-  // Main wings (wide), row 5.
+  // Hull (waterline), tapered at bow/stern.
   for (let x = 3; x <= 9; x++) {
-    setGray(colBase + x, 5, DARK);
+    setGray(colBase + x, 7, LIGHT);
   }
-  // Tail wings (narrower), row 8.
-  for (let x = 4; x <= 8; x++) {
-    setGray(colBase + x, 8, DARK);
+  // Midship tank/cabin, distinguishing the silhouette from Trade Ship's.
+  for (let x = 5; x <= 7; x++) {
+    setGray(colBase + x, 6, DARK);
   }
 }
 
 function main() {
   const target = process.argv[2];
   if (target === "icon") {
-    extendAtlas("icon-atlas.png", 64, drawAirportIcon);
+    extendAtlas("icon-atlas.png", 64, drawOilExtractorIcon);
   } else if (target === "unit") {
-    extendAtlas("unit-atlas.png", 13, drawCommercialAircraft);
+    extendAtlas("unit-atlas.png", 13, drawOilShip);
   } else {
     console.error("Usage: node scripts/extendSpriteAtlas.cjs <icon|unit>");
     process.exit(1);

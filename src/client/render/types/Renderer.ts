@@ -113,6 +113,7 @@ export interface UnitState {
   targetUnitId: number | null;
   targetTile: number | null;
   troops: number;
+  oil: number;
   missileTimerQueue: number[];
   level: number;
   veterancy: number;

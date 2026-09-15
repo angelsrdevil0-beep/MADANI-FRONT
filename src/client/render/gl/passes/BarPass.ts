@@ -16,7 +16,7 @@ import type { Config } from "../../../../core/configuration/Config";
 import { UnitType } from "../../../../core/game/Game";
 import { maxHealthWithVeterancy } from "../../../../core/game/Veterancy";
 import type { RendererConfig, UnitState } from "../../types";
-import { UT_MISSILE_SILO, UT_SAM_LAUNCHER } from "../../types";
+import { UT_MISSILE_SILO, UT_OIL_EXTRACTOR, UT_SAM_LAUNCHER } from "../../types";
 import type { RenderSettings } from "../RenderSettings";
 import { createProgram } from "../utils/GlUtils";
 
@@ -322,6 +322,13 @@ export class BarPass {
     ) {
       const readiness = this.missileReadiness(unit, gameTick);
       if (readiness < 1) return readiness;
+    }
+
+    // Oil storage fill level - shown whenever there's any oil, not just when
+    // full/empty like the other progress bars, so it always doubles as a
+    // live "how full is my tank" indicator.
+    if (unit.unitType === UT_OIL_EXTRACTOR && unit.oil > 0) {
+      return unit.oil / this.config.oilExtractorCapacity();
     }
 
     return null;

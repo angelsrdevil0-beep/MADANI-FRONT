@@ -19,9 +19,8 @@
  *
  * Atlas layout (13 columns × 13px cells). generate-sprite-atlases.mjs, the
  * real generator, isn't in this checkout — columns 0-11 were pre-built by
- * it upstream; column 12 (Commercial Aircraft) was hand-added with
- * scripts/extendUnitAtlas.cjs (pure Node zlib PNG surgery, same approach
- * as scripts/extendIconAtlas.cjs used for the structure icon atlas):
+ * it upstream; columns 12-13 (Commercial Aircraft, Oil Ship) were hand-added
+ * with scripts/extendSpriteAtlas.cjs (pure Node zlib PNG surgery):
  *   Col 0: Transport (5×5)
  *   Col 1: Trade Ship (5×5)
  *   Col 2: Warship (11×11)
@@ -35,6 +34,9 @@
  *   Col 10: Train Carriage (5×5)
  *   Col 11: Train Carriage Loaded (5×5)
  *   Col 12: Commercial Aircraft (7×7)
+ *   Col 13: Oil Ship (5×5) — renders in the ground/sea bucket like Trade
+ *   Ship, not the missile bucket; it's a boat, not a plane, despite both
+ *   sharing the same straight-line-ignoring-terrain travel simplification.
  *
  * Data flow:
  *   FrameSnapshot.units → filter by typeToAtlasIdx → instance VBO → GPU
@@ -52,6 +54,7 @@ import {
   UT_HYDROGEN_BOMB,
   UT_MIRV,
   UT_MIRV_WARHEAD,
+  UT_OIL_SHIP,
   UT_SAM_MISSILE,
   UT_SHELL,
   UT_TRADE_SHIP,
@@ -96,6 +99,7 @@ const UNIT_ORDER = [
   "TrainCarriage",
   "TrainCarriageLoaded",
   UT_COMMERCIAL_AIRCRAFT,
+  UT_OIL_SHIP,
 ] as const;
 
 const ATLAS_COLS = UNIT_ORDER.length;

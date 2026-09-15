@@ -65,6 +65,7 @@ function unitStateFromUpdate(u: UnitUpdate): UnitState {
     targetUnitId: u.targetUnitId ?? null,
     targetTile: u.targetTile ?? null,
     troops: u.troops,
+    oil: u.oil ?? 0,
     missileTimerQueue: u.missileTimerQueue,
     level: u.level,
     veterancy: u.warshipState?.veterancy ?? 0,
@@ -99,6 +100,7 @@ function applyUpdateInPlace(target: UnitState, u: UnitUpdate): void {
   target.targetUnitId = u.targetUnitId ?? null;
   target.targetTile = u.targetTile ?? null;
   target.troops = u.troops;
+  target.oil = u.oil ?? 0;
   target.missileTimerQueue = u.missileTimerQueue;
   target.level = u.level;
   target.veterancy = u.warshipState?.veterancy ?? 0;
