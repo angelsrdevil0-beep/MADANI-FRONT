@@ -19,6 +19,8 @@ something material changes — don't let it go stale.
   - `d355f5e` — Stage 2: Oil Extractor core data model
   - `d2317ad` — HANDOFF.md update
   - `9909d4c` — Stage 3: Oil Ship + export economy
+  - `c2d4870` — HANDOFF.md update
+  - `26848ab` — Stage 4: domestic rail export
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -160,6 +162,69 @@ confirmed unrelated to these changes: none of those files touch
 core-sim code, and `Auth.steam.test.ts` passes standalone both with and
 without these changes, only flaking under full-suite parallel load
 (a pre-existing timing race, not a regression).
+
+**Stage 4 — Domestic rail integration (commit `26848ab`)**: extractors can
+now export inland, closing the gap for extractors with no water access.
+
+Key research finding that shaped the design (worth knowing before
+touching rail code again): joining the rail network is **not** just
+proximity — `PortExecution.createStation()` only creates a
+`TrainStationExecution` for a Port if a Factory is *already built nearby*
+at that moment (retried every tick via `!unit.hasTrainStation()` until
+one appears), and symmetrically `FactoryExecution.createStation()`
+retroactively promotes nearby existing City/Port/(now)OilExtractor units
+when a Factory is built later. Both directions had to be covered for
+OilExtractor. This is a real, enforced gameplay constraint (factories
+anchor the rail network), not a UI-only hint — the misleading part is
+that the *client-side ghost-rail-preview* gating comment in
+`RailNetworkImpl.computeGhostRailPaths()` reads like it's just a preview
+nicety, but `PortExecution` enforces the same rule in the actual
+core-sim spawn path.
+
+- `OilExtractorExecution.ts`: gained `createStation()` (verbatim mirror
+  of `PortExecution.createStation()`) and `maybeExportByRail()`. The
+  latter looks up the extractor's own `TrainStation` via
+  `mg.railNetwork().stationManager().findStation(unit)`, checks its
+  `Cluster` for any station that's an active, owner-owned `UnitType.Port`
+  — and if found, drains a chunk of oil (same `oilShipCapacity()` size
+  cap, same `oilShipGold()` payout formula as the Oil Ship, reused rather
+  than adding new balance constants) straight to gold, paid only to the
+  extractor's own owner (domestic, no foreign-partner split needed).
+  **No literal Train unit is spawned for oil** — see the design note atop
+  the file for why (avoids duplicating `TrainExecution.ts`'s ~300 lines
+  of car-spawning/motion-plan/multi-hop-stop logic for a domestic,
+  zero-risk transfer where the literal journey isn't gameplay-load-bearing
+  the way the Oil Ship's foreign trip is).
+- `FactoryExecution.ts` / `RailNetworkImpl.connectToNearbyStations()`:
+  both hardcoded `[City, Port, Factory]` type-filter arrays gained
+  `UnitType.OilExtractor`, so extractors are discoverable as rail
+  neighbors in both build orders (Factory-first or extractor-first).
+- **Airport is not supported as a rail export destination** — it isn't
+  wired into the rail network anywhere in this codebase (no
+  `TrainStationExecution` path for it at all), so adding that is a
+  separate, similarly-sized follow-up, not a small addition to this
+  stage. Only Port works as the rail destination right now.
+- `tests/OilRail.test.ts` (3 tests, small `half_land_half_ocean` map):
+  overrides `trainStationMinRange`/`trainStationMaxRange` down from the
+  real 15-110 tile constants (too big for the 16x16 test map — same
+  test-only-config-override approach used throughout these stages, not a
+  behavior change) to verify export-once-connected-to-an-owned-Port,
+  never-connects-without-a-nearby-Factory, and
+  connected-but-no-owned-Port-still-doesn't-export.
+- Also updated: `RailroadSpatialGrid`/`overlappingRailroads`/
+  `computeGhostRailPaths` (client build-menu ghost-rail preview) were
+  deliberately **left untouched** — they only affect the UI preview, and
+  are Stage 6 client-wiring scope like everything else visual.
+
+Verified the same way as prior stages: `tsc --noEmit` clean, lint clean,
+all 39 Oil/rail/trade-related tests pass (including the pre-existing
+`TradeTrainGolden`/`TradeTrainScenarios` snapshot tests — unchanged,
+confirming no regression to the existing train economy). Full suite:
+only pre-existing `tests/client/*` flakiness, and this time it was
+visibly a *rotating* set of unrelated files failing between runs
+(`CosmeticsPaymentsMigration`/`InventoryModal`/`Auth.steam` on one run,
+`MainInitialize`/`InventoryModal` on the next) — a timing/resource race
+under full parallel load, not a regression from these changes.
 
 ## Known issues (found while testing in-browser, not yet fixed)
 
@@ -318,10 +383,7 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **1. Render Commercial Aircraft** — done, commit `86b04cc`.
 - [x] **2. Oil core data model + Oil Extractor** — done, commit `d355f5e`.
 - [x] **3. Oil Ship + export economy** — done, commit `9909d4c`.
-- [ ] **4. Domestic rail integration** (~60-90 min, most uncertain
-      estimate — haven't read `TrainStation.ts`/`RailNetworkImpl.ts` yet)
-      — extractors feed oil into the existing domestic rail network toward
-      the nearest Airport/Port for export.
+- [x] **4. Domestic rail integration** — done, commit `26848ab`.
 - [ ] **5. Geography-based yield weighting** (~45-75 min) — per-map
       affine calibration + real oil-region table, scoped to the maps where
       it matters; flat elsewhere. See the geography section above.
