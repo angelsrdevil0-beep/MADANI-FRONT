@@ -40,6 +40,8 @@ something material changes — don't let it go stale.
   - `73e9259` — Balance pass: Oil Ship payout scales with distance traveled
   - `7c44a6b` — HANDOFF.md update
   - `98f95de` — Rebrand visible UI from OpenFront to Madani Front
+  - `b32ad49` — HANDOFF.md update
+  - `fecfb30` — Make the game server deployable behind a single exposed port
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -794,6 +796,80 @@ passed) except the same pre-existing `InventoryModal.test.ts` flakiness.
 Live-verified in the browser (mobile nav sidebar and desktop nav bar
 both showing the new wordmark correctly) rather than just trusting the
 code read, since this was UI-facing.
+
+**Deployment: single-exposed-port fix (commit `fecfb30`)** — the user
+wants to play online with a friend, not willing to host on their own PC
+(or a friend's) and not willing to pay, which rules out both a self-run
+tunnel and a paid VPS. Landed on a free single-service PaaS (Render, at
+the user's choice, after weighing it against Oracle Cloud's Always-Free
+tier - Render is easier to set up but sleeps when idle; Oracle stays on
+permanently but is a raw VM needing real sysadmin work).
+
+Key finding before any of this could work at all: **this server is
+architected as one Master process plus separate Worker processes on
+their own internal ports** (`3001`, `3002`, ... — `ServerEnv.
+workerPortByIndex()`), normally stitched together by real infrastructure
+(nginx/Cloudflare per `docs/MultiServer.md`) that is **not in this
+repo**. A single-service free host only exposes one port. Without a fix,
+deploying as-is would only ever serve the homepage — every actual game
+connection (the WebSocket to `/wN`, and the `/api/create_game` call that
+mints one) would have nowhere to go, since nothing in this repo's own
+code proxies that traffic; it's nginx's job in real production.
+
+Fixed with two small, additive changes, both inert in the real fleet
+(nginx already intercepts these paths upstream of Master there, so they
+simply never fire in that setup):
+
+- `Master.ts`'s HTTP port was hardcoded to `3000` — now reads `$PORT`
+  (what Render/Railway/most PaaS hosts assign at runtime), falling back
+  to `3000` unchanged when unset.
+- `Master.ts` now proxies `/wN/*` (both regular HTTP and WebSocket
+  upgrades — the latter via a raw-socket splice after replaying the
+  original request line/headers to the worker, since Node's `http`
+  module has no built-in WS-upgrade proxying) and the two
+  random-worker create-game endpoints (`/api/create_game`, `/api/
+  adminbot/create_game`) to the correct worker's internal port. Also
+  added `$WORKER_BASE_PORT` (workers' own hardcoded `3001+index` base)
+  for the same reason — mostly so this could be tested locally without
+  colliding with the other chat session's own dev server already
+  sitting on 3000-3002 in this shared working directory.
+
+Verified locally, not just by reading the code: `npm run build-prod`,
+then `start:server` with `numWorkers: 1` and a throwaway
+`WORKER_BASE_PORT`, confirmed the homepage, `/cluster.json`, and a POST
+to bare `/api/create_game` all worked through the single exposed port —
+the create_game call reached the worker and got back a real application
+error ("Authorization header required"), not a proxy/connection failure,
+proving the request actually traversed Master → worker end-to-end.
+(Along the way, running `build-prod` left `static/` build output on disk,
+which briefly broke `tests/server/RenderHtml.test.ts` — that test reads
+the real `index.html`/asset-manifest state from disk rather than mocking
+it, and expects no build artifacts present. Not a real bug; cleaned up
+`static/` and reran the full suite green before committing.)
+
+**Not done yet — this is where the conversation left off**: the actual
+Render account/service setup itself. That requires the user's own
+GitHub push (this repo currently has no remote — `git remote -v` is
+empty) and Render account/signup, both of which are the user's to do
+(account creation isn't something to do on their behalf). Next step for
+whoever picks this back up: walk the user through (1) creating a GitHub
+repo and pushing this one to it, (2) creating a Render account and a new
+Web Service pointed at that repo, (3) build command `npm run inst && npm
+run build-prod`, start command `npm run start:server`, (4) environment
+variables — `GAME_ENV=dev`, `TURNSTILE_SITE_KEY=1x00000000000000000000AA`
+(Cloudflare's public always-pass test key), `API_KEY`/`ADMIN_BOT_API_KEY`
+set to the same dummy values `start:server-dev` uses (the real API is
+closed-source and not deployed, so these are never actually checked
+against anything), `GIT_COMMIT` to any string, and — the two that must
+match the Render-assigned hostname exactly — `DOMAIN=<service-name>.
+onrender.com` and `CLUSTER_JSON={"a":{"host":"<service-name>.onrender.
+com","color":"blue","numWorkers":1}}` (bare hostname, no `https://`).
+`numWorkers: 1` is deliberate — plenty for two friends, and it means
+`$WORKER_BASE_PORT` never needs setting on Render (no port conflict is
+possible inside an isolated container the way there was in local
+testing). Then (5) both players open the Render URL and use a private
+lobby (no login required — same guest-token flow already exercised
+throughout Solo testing in this project).
 
 ## Known issues (found while testing in-browser, not yet fixed)
 
