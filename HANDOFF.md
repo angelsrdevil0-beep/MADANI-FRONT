@@ -13,6 +13,8 @@ something material changes — don't let it go stale.
   - `d8a722b` — Phase 1: Airport structure + Commercial Aircraft trade plane
   - `63c84bf` — this HANDOFF.md
   - `c54168c` — Stage 0: removed the descoped fighter-jet/carrier scaffolding
+  - `a92a279` — HANDOFF.md update
+  - `86b04cc` — Stage 1: Commercial Aircraft now renders on the map
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -47,18 +49,21 @@ on arrival. Mirrors Port + TradeShip almost exactly. Tested end-to-end in
 airports, run ticks, assert gold increases on both ends. Full suite passes
 except pre-existing unrelated flakiness (confirmed against baseline).
 
-**Known gap**: Commercial Aircraft doesn't render on the map yet. Airport
-(a *structure*) does render — its icon was hand-added as a 7th column to
-`resources/atlases/icon-atlas.png` using a new standalone tool,
-`scripts/extendIconAtlas.cjs` (pure Node zlib PNG chunk surgery — no native
-deps, since the real `generate-sprite-atlases.mjs` generator isn't in this
-checkout). Commercial Aircraft is a *mobile unit* and needs the same
-surgery on `resources/atlases/unit-atlas.png` instead — a harder target
-because its columns are **variable-size** (5×5 to 13×13 px, see the doc
-comment at the top of `src/client/render/gl/passes/UnitPass.ts`), unlike
-the icon atlas's uniform 64×64 grid. `scripts/extendIconAtlas.cjs` is not
-directly reusable as-is for this — needs adapting (or write a sibling
-`extendUnitAtlas.cjs`). This is the very next thing to finish.
+**Phase 1's known gap is closed (commit `86b04cc`)**: Commercial Aircraft
+now renders. `resources/atlases/unit-atlas.png` (UnitPass's mobile-sprite
+atlas, 13×13px cells) got a 13th column — a small grayscale airplane
+silhouette, colorized per-player via the shader's existing 3-band
+gray-replacement (see `UnitPass.ts`'s doc comment). It renders in the
+"missile" z-order bucket (above structures) rather than the ground/sea
+bucket boats use, since it's the only mobile unit that flies over land and
+needs to show above city/factory/airport icons, not hidden under them.
+
+The two atlas tools (icon-atlas.png's and unit-atlas.png's) are now one
+file, `scripts/extendSpriteAtlas.cjs` (`node scripts/extendSpriteAtlas.cjs
+<icon|unit>`) — having two separate one-off `.cjs` scripts pushed
+eslint's default-project file-count cap (8) over the limit. Both atlas
+targets were verified byte-identical to their prior separately-generated
+output before committing.
 
 ## What got explicitly descoped
 
@@ -182,11 +187,16 @@ short range instead of exactly-on-shore).
   `executeTicks()` are the test harness; write tests against the real
   simulation, not mocks (per `CLAUDE.md`).
 - Sprite atlases (`resources/atlases/*.png`) have no generator script in
-  this checkout. `scripts/extendIconAtlas.cjs` is a hand-rolled pure-Node
-  PNG chunk encoder/decoder (no native deps) proven to work for the
-  fixed-64×64-grid icon atlas — reuse its `decodePng`/`encodePng`/
-  `addColumn` helpers for a `unit-atlas.png` variant, just handle variable
-  per-column sizes instead of a fixed grid.
+  this checkout. `scripts/extendSpriteAtlas.cjs` is a hand-rolled pure-Node
+  PNG chunk encoder/decoder (no native deps), proven for both the
+  fixed-64×64-grid icon atlas and the fixed-13×13-grid unit atlas — run
+  `node scripts/extendSpriteAtlas.cjs <icon|unit>` and edit the relevant
+  `draw*` function at the bottom for a new sprite/icon. (Turns out
+  unit-atlas.png's columns are a **uniform 13×13 grid**, not the
+  variable-size-per-type layout the doc comment implies — the smaller
+  stated sizes like "5×5" are just how much of the 13×13 cell each sprite
+  actually draws into, not a different cell size. Simpler than Phase 1's
+  handoff note assumed.)
 
 ## Staged plan (each stage = roughly one focused chat turn/session)
 
@@ -194,9 +204,7 @@ Update the checkbox and add a one-line note as each lands. Estimates are
 rough effort sizing, not wall-clock guarantees.
 
 - [x] **0. Cleanup** — done, commit `c54168c`.
-- [ ] **1. Render Commercial Aircraft** (~20-30 min) — finish Phase 1's
-      known gap: extend `unit-atlas.png` (variable-size columns, harder
-      than the icon atlas) with a plane sprite, wire it into `UnitPass.ts`.
+- [x] **1. Render Commercial Aircraft** — done, commit `86b04cc`.
 - [ ] **2. Oil core data model + Oil Extractor** (~45-60 min) — new
       `UnitType.OilExtractor`, the storage-cap mechanic (new to this
       codebase — a resource that fills and blocks production at capacity),
