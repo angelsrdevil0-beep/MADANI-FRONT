@@ -93,7 +93,25 @@ export function getCdnBase(): string {
   ) {
     return window.BOOTSTRAP_CONFIG.cdnBase;
   }
-  return globalThis.__CDN_BASE__ ?? "";
+  const workerCdnBase = globalThis.__CDN_BASE__;
+  if (workerCdnBase) {
+    return workerCdnBase;
+  }
+  // No CDN configured at all (a self-hosted deployment with CDN_BASE unset)
+  // and we're not on the main thread - buildAssetUrl() would otherwise
+  // return a bare root-relative path ("/_assets/..."), which relies on the
+  // worker's own self.location as an implicit fetch() base. That base isn't
+  // always usable for resolving a relative path (e.g. when the worker
+  // script itself was loaded via a blob: URL, which some bundlers do for
+  // module workers), so relative fetches inside the worker can throw
+  // "Failed to parse URL" instead of just working. Falling back to the
+  // worker's own origin makes every worker-side asset fetch an explicit
+  // absolute URL instead, sidestepping that resolution entirely. Guarded so
+  // this never runs server-side, where neither `self` nor `location` exist.
+  if (typeof self !== "undefined" && typeof location !== "undefined") {
+    return self.location.origin;
+  }
+  return "";
 }
 
 export function assetUrl(path: string): string {

@@ -1,5 +1,9 @@
-import { describe, expect, test } from "vitest";
-import { buildAssetUrl, rewriteAssetsForCdn } from "../src/core/AssetUrls";
+import { afterEach, describe, expect, test } from "vitest";
+import {
+  buildAssetUrl,
+  getCdnBase,
+  rewriteAssetsForCdn,
+} from "../src/core/AssetUrls";
 
 describe("AssetUrls", () => {
   test("returns hashed URLs for direct asset matches", () => {
@@ -99,6 +103,56 @@ describe("AssetUrls", () => {
         "https://cdn.example.com///",
       ),
     ).toBe("https://cdn.example.com/_assets/images/Favicon.hash.svg");
+  });
+});
+
+// Regression coverage for a worker-only bug: with no CDN configured (a
+// self-hosted deployment, CDN_BASE unset), asset fetches inside the game
+// simulation's Web Worker were building a bare root-relative path
+// ("/_assets/..."). Some bundlers load the worker script itself via a
+// blob: URL, and relative fetch() resolution against that base isn't
+// reliable in every engine - it can throw "Failed to parse URL" instead of
+// just working. getCdnBase() now falls back to the worker's own origin in
+// that case, so worker-side fetches always get an explicit absolute URL.
+describe("getCdnBase — worker-context fallback", () => {
+  const originalWindow = globalThis.window;
+  const originalSelf = (globalThis as { self?: unknown }).self;
+  const originalLocation = globalThis.location;
+  const originalCdnBase = globalThis.__CDN_BASE__;
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
+    (globalThis as { self?: unknown }).self = originalSelf;
+    Object.defineProperty(globalThis, "location", {
+      value: originalLocation,
+      configurable: true,
+      writable: true,
+    });
+    globalThis.__CDN_BASE__ = originalCdnBase;
+  });
+
+  function simulateWorkerContext(origin: string): void {
+    // @ts-expect-error - deliberately simulating "no window" (a worker
+    // context), which jsdom's test environment doesn't naturally provide.
+    delete globalThis.window;
+    (globalThis as { self?: unknown }).self = globalThis;
+    Object.defineProperty(globalThis, "location", {
+      value: { origin, href: `${origin}/` },
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  test("falls back to the worker's own origin when no CDN is configured", () => {
+    globalThis.__CDN_BASE__ = undefined;
+    simulateWorkerContext("https://madani-front-ka6k.onrender.com");
+    expect(getCdnBase()).toBe("https://madani-front-ka6k.onrender.com");
+  });
+
+  test("still prefers an explicitly-set __CDN_BASE__ over the fallback", () => {
+    globalThis.__CDN_BASE__ = "https://cdn.example.com";
+    simulateWorkerContext("https://madani-front-ka6k.onrender.com");
+    expect(getCdnBase()).toBe("https://cdn.example.com");
   });
 });
 
