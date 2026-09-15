@@ -23,6 +23,8 @@ something material changes — don't let it go stale.
   - `26848ab` — Stage 4: domestic rail export
   - `af3a9b4` — HANDOFF.md update
   - `2b10872` — Stage 5: geography-weighted oil yield
+  - `02cb46f` — HANDOFF.md update
+  - `f890c76` — Stage 6: client wiring (build menu, sprites, storage bar)
 - Project docs: `CLAUDE.md` (upstream's own architecture notes — read this
   too, it's accurate and short) and the plan file this session wrote at
   `C:\Users\Bardia\.claude\plans\dreamy-napping-feather.md` (the original
@@ -292,6 +294,77 @@ clean, all 16 Oil-related tests pass, full suite's only failure is the
 same recurring `tests/client/InventoryModal.test.ts` flakiness seen in
 every stage so far (still unrelated - never touched that file).
 
+**Stage 6 — Client wiring (commit `f890c76`)**: Oil Extractor is now
+selectable, placeable, and visible in-game; Oil Ship renders once
+spawned. This landed heavier than the original 30-45 min estimate (final
+scope closer to that estimate once the real touch list was mapped, but
+research to find that list took real time) — see the research notes
+below if this pattern needs repeating for a future unit.
+
+Key research findings, worth knowing before touching client rendering
+again:
+
+- **There are three separate places a new unit type has to be
+  registered on the client**, not one: (1) `src/client/render/types/
+  UnitType.ts` — the render layer's own mirrored string-constant copies
+  (`UT_*`) of `UnitType`, plus derived sets (`STRUCTURE_TYPES`) and the
+  `ALL_UNIT_TYPES` list — **and these must also be re-exported from
+  `src/client/render/types/index.ts`'s barrel**, easy to miss (caused a
+  `tsc` failure here); (2) the per-pass atlas-column order arrays
+  (`StructurePass.STRUCTURE_ORDER` / `UnitPass.UNIT_ORDER`) that
+  actually determine sprite position; (3) `HotbarIcons.ts` +
+  `BuildMenu.ts`'s separate SVG-based HUD icon system — structures get
+  rendered on the map via the icon-atlas.png (StructurePass), a
+  completely different asset from the build-menu's own SVG icon.
+- **`StructureLevelPass.ts` (level-number digits) and `PointLightPass.ts`
+  (glow) don't cover Airport either** — a pre-existing Phase-1 gap, not
+  something this stage needed to fix. OilExtractor doesn't need either
+  since it isn't upgradable, so this was a non-issue in the end, but
+  worth knowing if Airport's own gap ever gets fixed.
+- **The storage-fill indicator turned out easy**, contrary to HANDOFF's
+  prior uncertainty: `BarPass.ts`'s `computeStructureProgress()` already
+  handles construction/deletion/missile-readiness as a generic "progress
+  bar below structures" concept — adding Oil's storage fill was one
+  `if` branch, once `oil` was plumbed through `UnitState`
+  (`render/types/Renderer.ts`) and `UnitView.ts`'s two
+  UnitUpdate→UnitState converters (`unitStateFromUpdate`/
+  `applyUpdateInPlace`). Unlike health/missile bars (hidden when
+  "nothing interesting"), the oil bar always shows whenever there's any
+  oil, so it doubles as a live "how full is my tank" readout.
+- Adding a required field to `UnitState` breaks every test file that
+  builds a literal `UnitState` object (7 files here) — TypeScript catches
+  all of them at once via `tsc --noEmit`, so this is mechanical
+  (add the field to each fixture) rather than risky, just noisy.
+- The in-game radial/build-menu UI is canvas-rendered and not exposed via
+  the accessibility tree or light DOM the way `run-openfront` skill notes
+  suggested for other components — `document.querySelector("build-menu")`
+  **does** exist but renders into a `shadowRoot`, and stays empty until
+  the real open flow runs. The reliable way to open it from automation
+  turned out to be simulating the actual user gesture (**ctrl+left-click
+  on owned territory** dispatches `ShowBuildMenuEvent`), not DOM/event-bus
+  poking. Confirmed working end-to-end this way: the build menu opened
+  with all 12 items including Oil Extractor, correct icon, description,
+  and cost (150K).
+- Sprite atlas surgery reused Stage 1's `scripts/extendSpriteAtlas.cjs`
+  unchanged in mechanism — just swapped in two new `draw*` functions
+  (removed the old Airport/Commercial-Aircraft ones since they'd
+  otherwise be unused-and-lint-flagged dead code; their history is in
+  git, referenced by the script's own comment now). Verified the two
+  atlas PNGs' new columns have the expected non-transparent pixel data
+  by decoding them directly in Node (not just "the script printed
+  success") before trusting them.
+- One over-addition caught by tests: I added a `help_modal.build_oil_
+  extractor_desc` key "for consistency" with other structures, without
+  actually wiring a call site for it — `tests/TranslationSystem.test.ts`
+  correctly flagged it as unused and it was removed. Lesson: only add
+  i18n keys that have a real `translateText()` call site.
+
+Verified: `tsc --noEmit` clean, lint clean, full suite passes except the
+same recurring `tests/client/InventoryModal.test.ts` flakiness seen every
+stage (unrelated - never touched). Live-verified in the browser (see
+above) rather than just trusting the automated checks, since this was
+UI-facing work.
+
 ## Known issues (found while testing in-browser, not yet fixed)
 
 - **Bots never build Airports**, so no Commercial Aircraft trade ever
@@ -451,11 +524,7 @@ rough effort sizing, not wall-clock guarantees.
 - [x] **3. Oil Ship + export economy** — done, commit `9909d4c`.
 - [x] **4. Domestic rail integration** — done, commit `26848ab`.
 - [x] **5. Geography-based yield weighting** — done, commit `2b10872`.
-- [ ] **6. Client wiring** (~30-45 min) — icons, build menu, i18n
-      (remember `tests/EnJsonSorted.test.ts` enforces alphabetical order),
-      keybind, and a storage-level indicator UI (no existing "fill bar"
-      pattern to copy exactly — check if the health-bar rendering is
-      adaptable before inventing something new).
+- [x] **6. Client wiring** — done, commit `f890c76`.
 - [ ] **7. Tests + balance pass + full verification** (~20-30 min) —
       `npx tsc --noEmit`, `npm run lint`, `npm test`, dev-server sanity
       check, update this file's "What's actually done".
