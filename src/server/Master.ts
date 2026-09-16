@@ -21,6 +21,7 @@ import { MasterLobbyService } from "./MasterLobbyService";
 import { setNoStoreHeaders } from "./NoStoreHeaders";
 import { startPolling } from "./PollingLoop";
 import { renderAppShell } from "./RenderHtml";
+import { setSecurityHeaders } from "./SecurityHeaders";
 import { ServerEnv } from "./ServerEnv";
 import { applyStaticAssetCacheControl } from "./StaticAssetCache";
 
@@ -29,6 +30,11 @@ let lobbyService: MasterLobbyService;
 
 const app = express();
 const server = http.createServer(app);
+
+app.use((req, res, next) => {
+  setSecurityHeaders(res);
+  next();
+});
 
 const log = logger.child({ comp: "m" });
 

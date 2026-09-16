@@ -35,6 +35,7 @@ import { MapPlaylist } from "./MapPlaylist";
 import { setNoStoreHeaders } from "./NoStoreHeaders";
 import { startPolling } from "./PollingLoop";
 import { PrivilegeRefresher } from "./PrivilegeRefresher";
+import { setSecurityHeaders } from "./SecurityHeaders";
 import { ServerEnv } from "./ServerEnv";
 import { applyStaticAssetCacheControl } from "./StaticAssetCache";
 import { createMatchTelemetryEmitter } from "./telemetry/BufferedMatchTelemetryEmitter";
@@ -55,6 +56,10 @@ export async function startWorker() {
   const __dirname = path.dirname(__filename);
 
   const app = express();
+  app.use((req, res, next) => {
+    setSecurityHeaders(res);
+    next();
+  });
   app.use(express.json({ limit: "5mb" }));
   const server = http.createServer(app);
   const wss = new WebSocketServer({
