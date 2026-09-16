@@ -847,29 +847,93 @@ the real `index.html`/asset-manifest state from disk rather than mocking
 it, and expects no build artifacts present. Not a real bug; cleaned up
 `static/` and reran the full suite green before committing.)
 
-**Not done yet — this is where the conversation left off**: the actual
-Render account/service setup itself. That requires the user's own
-GitHub push (this repo currently has no remote — `git remote -v` is
-empty) and Render account/signup, both of which are the user's to do
-(account creation isn't something to do on their behalf). Next step for
-whoever picks this back up: walk the user through (1) creating a GitHub
-repo and pushing this one to it, (2) creating a Render account and a new
-Web Service pointed at that repo, (3) build command `npm run inst && npm
-run build-prod`, start command `npm run start:server`, (4) environment
-variables — `GAME_ENV=dev`, `TURNSTILE_SITE_KEY=1x00000000000000000000AA`
-(Cloudflare's public always-pass test key), `API_KEY`/`ADMIN_BOT_API_KEY`
-set to the same dummy values `start:server-dev` uses (the real API is
-closed-source and not deployed, so these are never actually checked
-against anything), `GIT_COMMIT` to any string, and — the two that must
-match the Render-assigned hostname exactly — `DOMAIN=<service-name>.
-onrender.com` and `CLUSTER_JSON={"a":{"host":"<service-name>.onrender.
-com","color":"blue","numWorkers":1}}` (bare hostname, no `https://`).
-`numWorkers: 1` is deliberate — plenty for two friends, and it means
-`$WORKER_BASE_PORT` never needs setting on Render (no port conflict is
-possible inside an isolated container the way there was in local
-testing). Then (5) both players open the Render URL and use a private
-lobby (no login required — same guest-token flow already exercised
-throughout Solo testing in this project).
+**Deployment done.** The site is live: `https://madani-front-ka6k.onrender.com`.
+Repo now has a real remote — `origin` → `github.com/angelsrdevil0-beep/
+MADANI-FRONT` (**public**), pushed and up to date with `master`. See the
+security section below for a live vulnerability found and fixed in this
+deployment's env vars.
+
+## Security hardening pass (in progress)
+
+Prompted by the user asking to "secure the site" now that it's live and
+the repo is public. Following the same staged/confirm-each-stage cadence
+as the Oil System work.
+
+**Stage 1 — rotated live secrets (user-side, done).** Found: this
+deployment's `API_KEY`/`ADMIN_BOT_API_KEY` env vars on Render were set to
+the literal dummy strings `npm run start:server-dev` uses
+(`WARNING_DEV_API_KEY_DO_NOT_USE_IN_PRODUCTION` /
+`WARNING_DEV_ADMIN_BOT_KEY_DO_NOT_USE_IN_PRODUCTION`, see `package.json`).
+Since the repo is public, that's not a secret at all — anyone reading it
+had live `/api/adminbot/*` access (`AdminBotRoutes.ts`: create private
+games, read any game's roster, send arbitrary intents with
+`isAdmin: true`). Generated two fresh random secrets locally (never sent
+over the network) and had the user rotate them in Render's dashboard.
+**Verified live**: POSTing `/api/adminbot/create_game` with the old
+placeholder key now returns `401 Unauthorized`.
+
+**Stage 2 — `trust proxy: 3` sanity check (done, no code change).**
+`Master.ts`/`Worker.ts` hardcode `app.set("trust proxy", 3)`. Render's own
+docs/community answers on this are genuinely inconsistent (their team says
+they both "append rather than clear" a client-supplied `X-Forwarded-For`
+*and* that the real IP ends up first — contradictory, and they don't
+publish an exact hop count). Rather than trust ambiguous third-party docs,
+tested empirically against the live site (user explicitly authorized this,
+including permission to "attack it"): sent parallel request bursts to
+`/favicon.svg` via the Browser pane's `fetch()`, once with no spoofed
+header (6/25 hit the 20-req/sec rate limit, as expected) and once with each
+of 25 requests carrying a *different* fake `X-Forwarded-For` IP (5/25 still
+hit the same limit). If `trust proxy` were over-trusting the client header,
+each fake IP would get its own fresh bucket and none should have been
+throttled — since throttling was statistically unchanged, the app is
+correctly resolving the real client IP regardless of what a client sends,
+so this isn't exploitable in practice. Left as-is.
+
+**Stage 3 — baseline security headers (commit `afb1329`).** New
+`src/server/SecurityHeaders.ts` (mirrors the existing `NoStoreHeaders.ts`
+pattern), wired into both `Master.ts` and `Worker.ts`: `X-Content-Type-
+Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, HSTS
+(180 days + subdomains — Render always terminates TLS, so this is safe
+unconditionally), and a `Permissions-Policy` disabling camera/mic/
+geolocation/usb (confirmed no call sites anywhere in this codebase).
+**Deliberately left out**: `payment` from the Permissions-Policy — this
+game has a real Stripe checkout flow (`StripeInline.ts`/`Payments.ts`)
+that embeds Stripe's iframe and can offer Apple/Google Pay, both gated on
+that permission propagating in; caught this before it shipped and removed
+it, would have silently broken real purchases otherwise. Also left out: a
+full Content-Security-Policy — this app loads Pixi/WebGL blob-URL workers,
+CDN-hosted JS, and cross-origin WebSockets to sibling deployments
+(`docs/MultiServer.md`), and a wrong CSP directive could silently break
+the game with no clear error. Needs its own careful, live-tested pass —
+flagged as a possible follow-up, not attempted here.
+
+**Stage 4 — dependency audit (commit `72fc15b`).** `npm audit --omit=dev`
+found one real production-surface issue: `colord <2.9.4`
+(GHSA-2wm5-q62r-hmrv — hangs instead of rejecting an oversized malformed
+color string). It's client-side only (theme/cosmetics/pattern-preview
+code — `ThemeProvider.ts`, `PlayerView.ts`, etc.), and some of those call
+sites can render another player's data, so a crafted string could hang a
+victim's tab. Patched via `npm audit fix` (2.9.3 → 2.10.0, stayed within
+the existing `^2.9.3` range in `package.json` — only `package-lock.json`
+changed). **Caution for next time**: running `npm audit fix --omit=dev`
+strips dev dependencies out of the actual `node_modules` install as a
+side effect (not just the report) — had to re-run `npm run inst`
+afterward to restore them before tests/lint would work again. The
+remaining 6 audit findings (vitest/`@vitest/mocker`, `fflate`, `nanoid`)
+are all dev-tooling-only, transitive through `@vitest/ui`/`postcss`,
+never shipped to the client bundle or server — fixing them needs a
+vitest major-version bump with no actual runtime security benefit, so
+left alone.
+
+**Stage 5 — Turnstile/bot-protection reality check — not started.** This
+deployment's `TURNSTILE_SITE_KEY` is Cloudflare's public "always-pass"
+test key (`1x00000000000000000000AA`), since the real closed-source API
+isn't deployed here — per `docs/Auth.md`, that also means auth runs in
+its less-secure "dev mode" fallback (persistentID only, no JWT). Likely
+an accepted limitation rather than something fixable without standing up
+the closed-source API — next session should confirm with the user what's
+actually exposed as a result and whether it's worth caring about for a
+small site played with friends, rather than assume either way.
 
 ## Known issues (found while testing in-browser, not yet fixed)
 
